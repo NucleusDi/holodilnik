@@ -6,3 +6,4 @@ npm-debug.log*
 .npm-cache/
 *.log
 fridge-screenshot.png
+.codex/

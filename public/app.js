@@ -44,6 +44,11 @@ function renderMagnet(magnet) {
   img.alt = magnet.originalName || 'Магнит';
   img.loading = 'lazy';
 
+  const caption = document.createElement('p');
+  caption.className = 'caption';
+  caption.textContent = magnet.caption || '';
+  caption.hidden = !magnet.caption;
+
   const like = document.createElement('button');
   like.className = 'like';
   like.type = 'button';
@@ -58,13 +63,13 @@ function renderMagnet(magnet) {
     }
   });
 
-  el.append(img, like);
+  el.append(img, caption, like);
   magnetsLayer.append(el);
 }
 
 function growFridge() {
   const base = window.innerHeight - (window.innerWidth <= 720 ? 16 : 36);
-  const bottom = magnets.reduce((max, magnet) => Math.max(max, magnet.y + magnet.height + 220), base);
+  const bottom = magnets.reduce((max, magnet) => Math.max(max, magnet.y + magnet.height + (magnet.caption ? 260 : 220)), base);
   fridge.style.minHeight = `${Math.max(bottom, base)}px`;
 }
 
@@ -114,6 +119,7 @@ async function uploadAt(file, clientX, clientY) {
     return;
   }
 
+  const caption = (window.prompt('Подпись под магнитом, до 30 символов', '') || '').trim().slice(0, 30);
   const rect = fridge.getBoundingClientRect();
   const size = await imageSize(file);
   const x = Math.max(16, clientX - rect.left - size.width / 2);
@@ -125,6 +131,7 @@ async function uploadAt(file, clientX, clientY) {
   form.append('y', String(Math.round(y)));
   form.append('width', String(size.width));
   form.append('height', String(size.height));
+  form.append('caption', caption);
 
   const magnet = await request('/api/magnets', { method: 'POST', body: form });
   if (magnet.status === 'approved') {

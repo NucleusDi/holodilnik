@@ -30,6 +30,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     file_name TEXT NOT NULL,
     original_name TEXT,
+    caption TEXT NOT NULL DEFAULT '',
     x REAL NOT NULL,
     y REAL NOT NULL,
     width INTEGER NOT NULL DEFAULT 160,
@@ -51,6 +52,11 @@ db.exec(`
     PRIMARY KEY (magnet_id, voter_id)
   );
 `);
+
+const magnetColumns = db.prepare('PRAGMA table_info(magnets)').all().map(column => column.name);
+if (!magnetColumns.includes('caption')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN caption TEXT NOT NULL DEFAULT ''");
+}
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insertSetting.run('title_text', process.env.SITE_TITLE || 'Наш холодильник');
@@ -130,7 +136,7 @@ app.get('/api/settings', (_req, res) => {
 app.get('/api/magnets', (req, res) => {
   const includePending = isAdmin(req) && req.query.all === '1';
   const rows = db.prepare(`
-    SELECT id, file_name AS fileName, original_name AS originalName, x, y, width, height, likes, status, created_at AS createdAt
+    SELECT id, file_name AS fileName, original_name AS originalName, caption, x, y, width, height, likes, status, created_at AS createdAt
     FROM magnets
     WHERE ${includePending ? '1 = 1' : "status = 'approved'"}
     ORDER BY created_at ASC
@@ -153,11 +159,13 @@ app.post('/api/magnets', upload.single('magnet'), (req, res) => {
   }
 
   const cfg = settings();
+  const caption = String(req.body.caption || '').trim().slice(0, 30);
   const id = crypto.randomUUID();
   const row = {
     id,
     fileName: req.file.filename,
     originalName: req.file.originalname,
+    caption,
     x: Math.round(x),
     y: Math.round(y),
     width: Math.min(Math.max(Number(req.body.width) || 160, 80), 360),
@@ -167,8 +175,8 @@ app.post('/api/magnets', upload.single('magnet'), (req, res) => {
   };
 
   db.prepare(`
-    INSERT INTO magnets (id, file_name, original_name, x, y, width, height, status)
-    VALUES (@id, @fileName, @originalName, @x, @y, @width, @height, @status)
+    INSERT INTO magnets (id, file_name, original_name, caption, x, y, width, height, status)
+    VALUES (@id, @fileName, @originalName, @caption, @x, @y, @width, @height, @status)
   `).run(row);
 
   res.status(201).json({ ...row, src: `/mems/${row.fileName}` });

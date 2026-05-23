@@ -52,6 +52,10 @@ function card(magnet) {
   meta.className = 'meta';
   meta.innerHTML = `<span>${magnet.status === 'pending' ? 'на модерации' : 'опубликован'}</span><span>♥ ${magnet.likes}</span>`;
 
+  const caption = document.createElement('div');
+  caption.className = 'admin-caption';
+  caption.textContent = magnet.caption ? `“${magnet.caption}”` : 'Без подписи';
+
   const actions = document.createElement('div');
   actions.className = 'admin-actions';
 
@@ -79,7 +83,7 @@ function card(magnet) {
   });
 
   actions.append(approve, remove);
-  el.append(img, meta, actions);
+  el.append(img, meta, caption, actions);
   return el;
 }
 
