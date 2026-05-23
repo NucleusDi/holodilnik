@@ -132,6 +132,33 @@ button:hover {
   background: #d84c62;
 }
 
+.mobile-upload {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  z-index: 9;
+  transform: translateX(-50%);
+  display: none;
+}
+
+.mobile-upload button {
+  min-height: 44px;
+  border: 1px solid rgba(255,255,255,0.76);
+  border-radius: 999px;
+  padding: 11px 18px;
+  color: #fff;
+  background: #27323a;
+  box-shadow: 0 10px 26px rgba(20, 35, 45, 0.22);
+}
+
+.mobile-upload.placing button {
+  background: #d84c62;
+}
+
+.fridge.placing {
+  cursor: crosshair;
+}
+
 .magnets {
   position: absolute;
   inset: 0;
@@ -370,6 +397,10 @@ button:hover {
     right: 32px;
   }
 
+  .mobile-upload {
+    display: block;
+  }
+
   .settings-grid,
   .admin-actions {
     grid-template-columns: 1fr;
@@ -380,5 +411,11 @@ button:hover {
   .form-row {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (pointer: coarse) {
+  .mobile-upload {
+    display: block;
   }
 }

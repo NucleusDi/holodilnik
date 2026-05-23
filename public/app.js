@@ -4,14 +4,26 @@ const dropHint = document.querySelector('#dropHint');
 const toast = document.querySelector('#toast');
 const titleText = document.querySelector('#titleText');
 const titleImage = document.querySelector('#titleImage');
+const mobileUpload = document.querySelector('#mobileUpload');
+const mobileUploadButton = document.querySelector('#mobileUploadButton');
+const mobileMagnetInput = document.querySelector('#mobileMagnetInput');
 
 let magnets = [];
+let pendingMobileFile = null;
 
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add('show');
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+function resetMobilePlacement() {
+  pendingMobileFile = null;
+  fridge.classList.remove('placing');
+  mobileUpload.classList.remove('placing');
+  mobileUploadButton.textContent = 'Выбрать магнит';
+  dropHint.textContent = 'Перетащите картинку на холодильник';
 }
 
 async function request(url, options) {
@@ -142,6 +154,7 @@ async function uploadAt(file, clientX, clientY) {
   } else {
     showToast('Магнит отправлен на модерацию');
   }
+  resetMobilePlacement();
 }
 
 fridge.addEventListener('dragover', (event) => {
@@ -163,6 +176,41 @@ fridge.addEventListener('drop', async (event) => {
     await uploadAt(event.dataTransfer.files[0], event.clientX, event.clientY);
   } catch (error) {
     showToast(error.message);
+  }
+});
+
+mobileUploadButton.addEventListener('click', () => {
+  if (pendingMobileFile) {
+    resetMobilePlacement();
+    return;
+  }
+  mobileMagnetInput.click();
+});
+
+mobileMagnetInput.addEventListener('change', () => {
+  const file = mobileMagnetInput.files[0];
+  mobileMagnetInput.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Нужна картинка: PNG, JPG, GIF или WebP');
+    return;
+  }
+  pendingMobileFile = file;
+  fridge.classList.add('placing');
+  mobileUpload.classList.add('placing');
+  mobileUploadButton.textContent = 'Отменить';
+  dropHint.textContent = 'Тапните место для магнита';
+  showToast('Теперь тапните по холодильнику');
+});
+
+fridge.addEventListener('click', async (event) => {
+  if (!pendingMobileFile) return;
+  if (event.target.closest('.magnet') || event.target.closest('.mobile-upload')) return;
+  try {
+    await uploadAt(pendingMobileFile, event.clientX, event.clientY);
+  } catch (error) {
+    showToast(error.message);
+    resetMobilePlacement();
   }
 });
 
