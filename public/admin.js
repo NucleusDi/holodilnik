@@ -60,7 +60,7 @@ function card(magnet) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  meta.innerHTML = `<span>${magnet.status === 'pending' ? 'на модерации' : 'опубликован'}</span><span>${magnet.frameStyle || 'polaroid'} · ♥ ${magnet.likes}</span>`;
+  meta.innerHTML = `<span>${magnet.status === 'pending' ? 'на модерации' : 'опубликован'}</span><span>${magnet.frameStyle || 'polaroid'} · ${magnet.frameColor || 'white'} · ♥ ${magnet.likes}</span>`;
 
   const caption = document.createElement('div');
   caption.className = 'admin-caption';

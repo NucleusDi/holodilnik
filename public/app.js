@@ -12,6 +12,7 @@ const uploadForm = document.querySelector('#uploadForm');
 const uploadPreview = document.querySelector('#uploadPreview');
 const captionInput = document.querySelector('#captionInput');
 const frameStyleInput = document.querySelector('#frameStyleInput');
+const frameColorInput = document.querySelector('#frameColorInput');
 const cancelUpload = document.querySelector('#cancelUpload');
 const closeUploadDialog = document.querySelector('#closeUploadDialog');
 
@@ -19,6 +20,7 @@ let magnets = [];
 let pendingUpload = null;
 let uploadDialogResolve = null;
 let selectedFrameStyle = 'polaroid';
+let selectedFrameColor = 'white';
 let adminMode = false;
 let adminDrag = null;
 
@@ -54,7 +56,9 @@ function rotationFor(id) {
 
 function renderMagnet(magnet) {
   const el = document.createElement('article');
-  el.className = `magnet frame-${magnet.frameStyle || 'polaroid'} ${magnet.status === 'pending' ? 'pending' : ''}`;
+  const frameStyle = ['polaroid', 'circle'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
+  const frameColor = magnet.frameColor || 'white';
+  el.className = `magnet frame-${frameStyle} frame-color-${frameColor} ${magnet.status === 'pending' ? 'pending' : ''}`;
   el.style.left = `${magnet.x}px`;
   el.style.top = `${magnet.y}px`;
   el.style.setProperty('--w', `${magnet.width}px`);
@@ -180,6 +184,7 @@ function showUploadDialog(file) {
   uploadPreview.src = URL.createObjectURL(file);
   captionInput.value = '';
   setSelectedFrameStyle('polaroid');
+  setSelectedFrameColor('white');
   uploadDialog.showModal();
   captionInput.focus();
   return new Promise(resolve => {
@@ -193,13 +198,27 @@ function showUploadDialog(file) {
 }
 
 function setSelectedFrameStyle(frameStyle) {
-  selectedFrameStyle = ['polaroid', 'circle', 'bare'].includes(frameStyle) ? frameStyle : 'polaroid';
+  selectedFrameStyle = ['polaroid', 'circle'].includes(frameStyle) ? frameStyle : 'polaroid';
   frameStyleInput.querySelectorAll('[data-frame-style]').forEach(button => {
     const active = button.dataset.frameStyle === selectedFrameStyle;
     button.classList.toggle('active', active);
     button.setAttribute('aria-checked', String(active));
   });
-  uploadPreview.className = `upload-preview preview-${selectedFrameStyle}`;
+  updatePreviewClass();
+}
+
+function setSelectedFrameColor(frameColor) {
+  selectedFrameColor = ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'].includes(frameColor) ? frameColor : 'white';
+  frameColorInput.querySelectorAll('[data-frame-color]').forEach(button => {
+    const active = button.dataset.frameColor === selectedFrameColor;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  updatePreviewClass();
+}
+
+function updatePreviewClass() {
+  uploadPreview.className = `upload-preview preview-${selectedFrameStyle} frame-color-${selectedFrameColor}`;
 }
 
 async function prepareUpload(file) {
@@ -229,6 +248,7 @@ async function uploadAt(upload, clientX, clientY) {
   form.append('height', String(size.height));
   form.append('caption', upload.caption);
   form.append('frameStyle', upload.frameStyle);
+  form.append('frameColor', upload.frameColor);
 
   const magnet = await request('/api/magnets', { method: 'POST', body: form });
   if (magnet.status === 'approved') {
@@ -307,7 +327,8 @@ uploadForm.addEventListener('submit', (event) => {
   if (!uploadDialogResolve) return;
   uploadDialogResolve({
     caption: captionInput.value.trim().slice(0, 30),
-    frameStyle: selectedFrameStyle
+    frameStyle: selectedFrameStyle,
+    frameColor: selectedFrameColor
   });
 });
 
@@ -317,6 +338,11 @@ frameStyleInput.addEventListener('click', (event) => {
   const button = event.target.closest('[data-frame-style]');
   if (!button) return;
   setSelectedFrameStyle(button.dataset.frameStyle);
+});
+frameColorInput.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-frame-color]');
+  if (!button) return;
+  setSelectedFrameColor(button.dataset.frameColor);
 });
 
 window.addEventListener('pointermove', (event) => {

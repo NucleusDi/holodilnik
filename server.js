@@ -35,6 +35,7 @@ db.exec(`
     original_name TEXT,
     caption TEXT NOT NULL DEFAULT '',
     frame_style TEXT NOT NULL DEFAULT 'polaroid',
+    frame_color TEXT NOT NULL DEFAULT 'white',
     x REAL NOT NULL,
     y REAL NOT NULL,
     width INTEGER NOT NULL DEFAULT 160,
@@ -71,6 +72,9 @@ if (!magnetColumns.includes('caption')) {
 if (!magnetColumns.includes('frame_style')) {
   db.exec("ALTER TABLE magnets ADD COLUMN frame_style TEXT NOT NULL DEFAULT 'polaroid'");
 }
+if (!magnetColumns.includes('frame_color')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN frame_color TEXT NOT NULL DEFAULT 'white'");
+}
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insertSetting.run('title_text', process.env.SITE_TITLE || 'Наш холодильник');
@@ -105,7 +109,11 @@ function ipHash(req) {
 }
 
 function cleanFrameStyle(value) {
-  return ['polaroid', 'circle', 'bare'].includes(value) ? value : 'polaroid';
+  return ['polaroid', 'circle'].includes(value) ? value : 'polaroid';
+}
+
+function cleanFrameColor(value) {
+  return ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'].includes(value) ? value : 'white';
 }
 
 function cleanColor(value) {
@@ -210,7 +218,7 @@ app.get('/api/settings', (_req, res) => {
 app.get('/api/magnets', (req, res) => {
   const includePending = isAdmin(req) && req.query.all === '1';
   const rows = db.prepare(`
-    SELECT id, file_name AS fileName, original_name AS originalName, caption, frame_style AS frameStyle, x, y, width, height, likes, status, created_at AS createdAt
+    SELECT id, file_name AS fileName, original_name AS originalName, caption, frame_style AS frameStyle, frame_color AS frameColor, x, y, width, height, likes, status, created_at AS createdAt
     FROM magnets
     WHERE ${includePending ? '1 = 1' : "status = 'approved'"}
     ORDER BY created_at ASC
@@ -239,6 +247,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
   const cfg = settings();
   const caption = String(req.body.caption || '').trim().slice(0, 30);
   const frameStyle = cleanFrameStyle(req.body.frameStyle || req.body.frame_style);
+  const frameColor = cleanFrameColor(req.body.frameColor || req.body.frame_color);
   const id = crypto.randomUUID();
   const row = {
     id,
@@ -246,6 +255,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     originalName: req.file.originalname,
     caption,
     frameStyle,
+    frameColor,
     x: Math.round(x),
     y: Math.round(y),
     width: Math.min(Math.max(Number(req.body.width) || 160, 80), 360),
@@ -255,8 +265,8 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
   };
 
   db.prepare(`
-    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, x, y, width, height, status)
-    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @x, @y, @width, @height, @status)
+    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, status)
+    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status)
   `).run(row);
 
   res.status(201).json({ ...row, src: `/mems/${row.fileName}` });
@@ -349,11 +359,12 @@ app.patch('/api/admin/magnets/:id', (req, res) => {
     x: Number.isFinite(Number(req.body.x)) ? Math.max(0, Math.round(Number(req.body.x))) : current.x,
     y: Number.isFinite(Number(req.body.y)) ? Math.max(0, Math.round(Number(req.body.y))) : current.y,
     caption: typeof req.body.caption === 'string' ? req.body.caption.trim().slice(0, 30) : current.caption,
-    frameStyle: typeof req.body.frameStyle === 'string' ? cleanFrameStyle(req.body.frameStyle) : current.frame_style
+    frameStyle: typeof req.body.frameStyle === 'string' ? cleanFrameStyle(req.body.frameStyle) : cleanFrameStyle(current.frame_style),
+    frameColor: typeof req.body.frameColor === 'string' ? cleanFrameColor(req.body.frameColor) : cleanFrameColor(current.frame_color)
   };
   const result = db.prepare(`
     UPDATE magnets
-    SET status = @status, x = @x, y = @y, caption = @caption, frame_style = @frameStyle
+    SET status = @status, x = @x, y = @y, caption = @caption, frame_style = @frameStyle, frame_color = @frameColor
     WHERE id = @id
   `).run(next);
   logAdmin('magnet:update', next);
