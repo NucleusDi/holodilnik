@@ -1,0 +1,360 @@
+:root {
+  color-scheme: light;
+  --ink: #27323a;
+  --muted: #66727a;
+  --steel: #dce6eb;
+  --steel-dark: #aebfc8;
+  --accent: #d84c62;
+  --shadow: 0 18px 45px rgba(20, 35, 45, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: #eef4f5;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: #fff;
+  background: #27323a;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #101820;
+}
+
+.fridge-page {
+  min-height: 100vh;
+  padding: 18px clamp(10px, 3vw, 32px);
+}
+
+.fridge {
+  position: relative;
+  width: min(960px, 100%);
+  min-height: calc(100vh - 36px);
+  margin: 0 auto;
+  overflow: visible;
+  border: 1px solid rgba(39, 50, 58, 0.16);
+  border-radius: 18px 18px 10px 10px;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.44), rgba(255,255,255,0) 16%, rgba(0,0,0,0.045) 84%, rgba(255,255,255,0.34)),
+    linear-gradient(180deg, #f8fbfb 0, #edf4f6 52%, #dfe9ed 100%);
+  box-shadow: var(--shadow);
+}
+
+.fridge::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 100vh;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.66), rgba(255,255,255,0) 24%),
+    radial-gradient(circle at 18% 16%, rgba(255,255,255,0.75), transparent 24%),
+    linear-gradient(90deg, transparent, rgba(70,90,100,0.08) 50%, transparent);
+  border-radius: inherit;
+}
+
+.fridge::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: 12px;
+  height: calc(100% - 32px);
+  min-height: 75vh;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fefefe, #bbcbd2);
+  box-shadow: inset 1px 0 1px rgba(255,255,255,0.8), -12px 0 20px rgba(28,45,55,0.04);
+  opacity: 0.72;
+}
+
+.fridge-header {
+  position: absolute;
+  z-index: 4;
+  top: 34px;
+  left: 28px;
+  right: 44px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.fridge-header h1 {
+  margin: 0;
+  font-size: clamp(34px, 7vw, 72px);
+  line-height: 1;
+  letter-spacing: 0;
+  color: #2a363b;
+  text-shadow: 0 2px 0 rgba(255,255,255,0.9), 0 12px 26px rgba(55,76,86,0.18);
+}
+
+.title-image {
+  max-width: min(520px, 86%);
+  max-height: 140px;
+  object-fit: contain;
+}
+
+.drop-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 8;
+  transform: translateX(-50%);
+  max-width: calc(100% - 28px);
+  padding: 11px 15px;
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 999px;
+  color: #30404a;
+  background: rgba(255,255,255,0.82);
+  box-shadow: 0 8px 24px rgba(20, 35, 45, 0.14);
+  backdrop-filter: blur(12px);
+  white-space: nowrap;
+}
+
+.drop-hint.active {
+  color: #fff;
+  background: #d84c62;
+}
+
+.magnets {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.magnet {
+  position: absolute;
+  display: block;
+  width: var(--w);
+  min-width: 80px;
+  transform: rotate(var(--r));
+  border: 8px solid #fff;
+  border-bottom-width: 18px;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(17, 31, 39, 0.2);
+}
+
+.magnet.pending {
+  opacity: 0.58;
+  outline: 3px dashed #d84c62;
+}
+
+.magnet img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: var(--h);
+  object-fit: contain;
+  border-radius: 3px;
+  background: #f4f7f8;
+}
+
+.like {
+  position: absolute;
+  right: -12px;
+  bottom: -18px;
+  display: inline-grid;
+  min-width: 38px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  padding: 0 8px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: 0 5px 14px rgba(160, 31, 52, 0.28);
+}
+
+.like::before {
+  content: "♥ ";
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  z-index: 30;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100% - 28px));
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(27, 38, 46, 0.94);
+  box-shadow: 0 12px 35px rgba(0,0,0,0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+.admin-body {
+  background: #f5f7f8;
+}
+
+.admin-shell {
+  width: min(1100px, calc(100% - 28px));
+  margin: 28px auto;
+}
+
+.admin-panel {
+  padding: 22px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(30, 50, 60, 0.08);
+}
+
+.admin-top,
+.admin-subhead,
+.form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-top h1,
+.admin-subhead h2,
+.admin-panel h1 {
+  margin: 0 0 18px;
+}
+
+.admin-top h1,
+.admin-subhead h2 {
+  margin-bottom: 0;
+}
+
+.form-row input,
+.settings-grid input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cad5da;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.settings-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.settings-grid button {
+  align-self: end;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-magnets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.admin-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.admin-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #edf3f5;
+}
+
+.admin-card .meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.danger {
+  background: #b83242;
+}
+
+.secondary {
+  color: #24313a;
+  background: #dfe8ec;
+}
+
+@media (max-width: 720px) {
+  .fridge-page {
+    padding: 8px;
+  }
+
+  .fridge {
+    min-height: calc(100vh - 16px);
+    border-radius: 14px 14px 8px 8px;
+  }
+
+  .fridge-header {
+    top: 24px;
+    left: 18px;
+    right: 32px;
+  }
+
+  .settings-grid,
+  .admin-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-top,
+  .admin-subhead,
+  .form-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

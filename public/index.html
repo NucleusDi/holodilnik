@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Наш холодильник</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="fridge-page">
+    <section id="fridge" class="fridge" aria-label="Общий холодильник для магнитов">
+      <header class="fridge-header">
+        <img id="titleImage" class="title-image" alt="" hidden>
+        <h1 id="titleText">Наш холодильник</h1>
+      </header>
+
+      <div class="drop-hint" id="dropHint">
+        Перетащите картинку на холодильник
+      </div>
+
+      <div id="magnets" class="magnets"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

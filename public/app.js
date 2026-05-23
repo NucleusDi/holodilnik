@@ -1,0 +1,163 @@
+const fridge = document.querySelector('#fridge');
+const magnetsLayer = document.querySelector('#magnets');
+const dropHint = document.querySelector('#dropHint');
+const toast = document.querySelector('#toast');
+const titleText = document.querySelector('#titleText');
+const titleImage = document.querySelector('#titleImage');
+
+let magnets = [];
+
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add('show');
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+async function request(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Что-то пошло не так');
+  }
+  return data;
+}
+
+function rotationFor(id) {
+  let n = 0;
+  for (const ch of id) n += ch.charCodeAt(0);
+  return ((n % 13) - 6) / 2;
+}
+
+function renderMagnet(magnet) {
+  const el = document.createElement('article');
+  el.className = `magnet ${magnet.status === 'pending' ? 'pending' : ''}`;
+  el.style.left = `${magnet.x}px`;
+  el.style.top = `${magnet.y}px`;
+  el.style.setProperty('--w', `${magnet.width}px`);
+  el.style.setProperty('--h', `${magnet.height}px`);
+  el.style.setProperty('--r', `${rotationFor(magnet.id)}deg`);
+  el.dataset.id = magnet.id;
+
+  const img = document.createElement('img');
+  img.src = magnet.src;
+  img.alt = magnet.originalName || 'Магнит';
+  img.loading = 'lazy';
+
+  const like = document.createElement('button');
+  like.className = 'like';
+  like.type = 'button';
+  like.textContent = magnet.likes;
+  like.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    try {
+      const result = await request(`/api/magnets/${magnet.id}/like`, { method: 'POST' });
+      like.textContent = result.likes;
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+
+  el.append(img, like);
+  magnetsLayer.append(el);
+}
+
+function growFridge() {
+  const base = window.innerHeight - (window.innerWidth <= 720 ? 16 : 36);
+  const bottom = magnets.reduce((max, magnet) => Math.max(max, magnet.y + magnet.height + 220), base);
+  fridge.style.minHeight = `${Math.max(bottom, base)}px`;
+}
+
+async function loadAll() {
+  const [cfg, rows] = await Promise.all([
+    request('/api/settings'),
+    request('/api/magnets')
+  ]);
+
+  document.title = cfg.titleText || 'Наш холодильник';
+  titleText.textContent = cfg.titleText || 'Наш холодильник';
+  if (cfg.titleImage) {
+    titleImage.src = cfg.titleImage;
+    titleImage.hidden = false;
+    titleText.hidden = true;
+  } else {
+    titleImage.hidden = true;
+    titleText.hidden = false;
+  }
+
+  magnets = rows;
+  magnetsLayer.replaceChildren();
+  magnets.forEach(renderMagnet);
+  growFridge();
+}
+
+function imageSize(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      const max = 220;
+      const scale = Math.min(max / img.naturalWidth, max / img.naturalHeight, 1);
+      resolve({
+        width: Math.round(Math.max(img.naturalWidth * scale, 90)),
+        height: Math.round(Math.max(img.naturalHeight * scale, 90))
+      });
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function uploadAt(file, clientX, clientY) {
+  if (!file || !file.type.startsWith('image/')) {
+    showToast('Нужна картинка: PNG, JPG, GIF или WebP');
+    return;
+  }
+
+  const rect = fridge.getBoundingClientRect();
+  const size = await imageSize(file);
+  const x = Math.max(16, clientX - rect.left - size.width / 2);
+  const y = Math.max(130, clientY - rect.top - size.height / 2);
+
+  const form = new FormData();
+  form.append('magnet', file);
+  form.append('x', String(Math.round(x)));
+  form.append('y', String(Math.round(y)));
+  form.append('width', String(size.width));
+  form.append('height', String(size.height));
+
+  const magnet = await request('/api/magnets', { method: 'POST', body: form });
+  if (magnet.status === 'approved') {
+    magnets.push(magnet);
+    renderMagnet(magnet);
+    growFridge();
+    showToast('Магнит прилип');
+  } else {
+    showToast('Магнит отправлен на модерацию');
+  }
+}
+
+fridge.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  dropHint.classList.add('active');
+  dropHint.textContent = 'Отпустите картинку здесь';
+});
+
+fridge.addEventListener('dragleave', () => {
+  dropHint.classList.remove('active');
+  dropHint.textContent = 'Перетащите картинку на холодильник';
+});
+
+fridge.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  dropHint.classList.remove('active');
+  dropHint.textContent = 'Перетащите картинку на холодильник';
+  try {
+    await uploadAt(event.dataTransfer.files[0], event.clientX, event.clientY);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+window.addEventListener('resize', growFridge);
+loadAll().catch(error => showToast(error.message));

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Админка холодильника</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="admin-body">
+  <main class="admin-shell">
+    <section id="loginPanel" class="admin-panel">
+      <h1>Админка</h1>
+      <form id="loginForm" class="form-row">
+        <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+        <button type="submit">Войти</button>
+      </form>
+    </section>
+
+    <section id="adminPanel" class="admin-panel" hidden>
+      <div class="admin-top">
+        <h1>Управление холодильником</h1>
+        <button id="logout" type="button">Выйти</button>
+      </div>
+
+      <form id="settingsForm" class="settings-grid">
+        <label>
+          Надпись
+          <input id="titleTextInput" name="titleText" maxlength="80">
+        </label>
+        <label>
+          Картинка вместо надписи
+          <input id="titleImageInput" name="titleImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+        </label>
+        <label class="checkbox-row">
+          <input id="moderationInput" name="moderation" type="checkbox">
+          Модерация новых магнитов
+        </label>
+        <label class="checkbox-row">
+          <input id="clearTitleImage" name="clearTitleImage" type="checkbox">
+          Убрать картинку заголовка
+        </label>
+        <button type="submit">Сохранить</button>
+      </form>
+
+      <div class="admin-subhead">
+        <h2>Магниты</h2>
+        <button id="refresh" type="button">Обновить</button>
+      </div>
+      <div id="adminMagnets" class="admin-magnets"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/
+mems/
+npm-debug.log*
+.npm-cache/
+*.log
+fridge-screenshot.png
