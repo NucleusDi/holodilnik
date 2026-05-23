@@ -64,12 +64,16 @@ function card(magnet) {
   approve.className = 'secondary';
   approve.textContent = magnet.status === 'pending' ? 'Одобрить' : 'Скрыть';
   approve.addEventListener('click', async () => {
-    await request(`/api/admin/magnets/${magnet.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: magnet.status === 'pending' ? 'approved' : 'pending' })
-    });
-    await loadMagnets();
+    try {
+      await request(`/api/admin/magnets/${magnet.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: magnet.status === 'pending' ? 'approved' : 'pending' })
+      });
+      await loadMagnets();
+    } catch (error) {
+      showToast(error.message);
+    }
   });
 
   const remove = document.createElement('button');
@@ -78,8 +82,13 @@ function card(magnet) {
   remove.textContent = 'Удалить';
   remove.addEventListener('click', async () => {
     if (!confirm('Удалить магнит навсегда?')) return;
-    await request(`/api/admin/magnets/${magnet.id}`, { method: 'DELETE' });
-    await loadMagnets();
+    try {
+      await request(`/api/admin/magnets/${magnet.id}`, { method: 'DELETE' });
+      await loadMagnets();
+      showToast('Магнит удален');
+    } catch (error) {
+      showToast(error.message);
+    }
   });
 
   actions.append(approve, remove);

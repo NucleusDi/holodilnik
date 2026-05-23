@@ -110,7 +110,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: 'auto',
     maxAge: 1000 * 60 * 60 * 24 * 14
   }
 }));
@@ -122,7 +122,7 @@ app.use((req, res, next) => {
     res.cookie('fridge_voter', crypto.randomUUID(), {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: req.secure,
       maxAge: 1000 * 60 * 60 * 24 * 365
     });
   }
