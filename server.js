@@ -19,6 +19,9 @@ const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'holodilnik.sqlite');
 const MAX_MAGNET_SIZE = 8 * 1024 * 1024;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-pass';
+const UPLOAD_WINDOW_MS = 10 * 60 * 1000;
+const UPLOAD_LIMIT = 10;
+const uploadHits = new Map();
 
 fs.mkdirSync(MEMS_DIR, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -31,6 +34,7 @@ db.exec(`
     file_name TEXT NOT NULL,
     original_name TEXT,
     caption TEXT NOT NULL DEFAULT '',
+    frame_style TEXT NOT NULL DEFAULT 'polaroid',
     x REAL NOT NULL,
     y REAL NOT NULL,
     width INTEGER NOT NULL DEFAULT 160,
@@ -51,17 +55,29 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (magnet_id, voter_id)
   );
+
+  CREATE TABLE IF NOT EXISTS admin_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const magnetColumns = db.prepare('PRAGMA table_info(magnets)').all().map(column => column.name);
 if (!magnetColumns.includes('caption')) {
   db.exec("ALTER TABLE magnets ADD COLUMN caption TEXT NOT NULL DEFAULT ''");
 }
+if (!magnetColumns.includes('frame_style')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN frame_style TEXT NOT NULL DEFAULT 'polaroid'");
+}
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insertSetting.run('title_text', process.env.SITE_TITLE || 'Наш холодильник');
 insertSetting.run('title_image', '');
 insertSetting.run('moderation', 'false');
+insertSetting.run('title_color', '#2a363b');
+insertSetting.run('title_font', 'classic');
 
 const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
@@ -70,12 +86,70 @@ function settings() {
   return {
     titleText: getSetting.get('title_text')?.value || 'Наш холодильник',
     titleImage: getSetting.get('title_image')?.value || '',
-    moderation: getSetting.get('moderation')?.value === 'true'
+    moderation: getSetting.get('moderation')?.value === 'true',
+    titleColor: getSetting.get('title_color')?.value || '#2a363b',
+    titleFont: getSetting.get('title_font')?.value || 'classic'
   };
 }
 
 function isAdmin(req) {
   return Boolean(req.session?.admin);
+}
+
+function clientKey(req) {
+  return req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+}
+
+function ipHash(req) {
+  return crypto.createHash('sha256').update(String(clientKey(req))).digest('hex').slice(0, 20);
+}
+
+function cleanFrameStyle(value) {
+  return ['polaroid', 'circle', 'bare'].includes(value) ? value : 'polaroid';
+}
+
+function cleanColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : '#2a363b';
+}
+
+function cleanTitleFont(value) {
+  return ['classic', 'hand', 'strict'].includes(value) ? value : 'classic';
+}
+
+function logAdmin(action, details = {}) {
+  db.prepare('INSERT INTO admin_logs (action, details) VALUES (?, ?)').run(action, JSON.stringify(details));
+}
+
+function checkUploadRate(req, res, next) {
+  if (isAdmin(req)) {
+    next();
+    return;
+  }
+  const key = clientKey(req);
+  const now = Date.now();
+  const hits = (uploadHits.get(key) || []).filter(time => now - time < UPLOAD_WINDOW_MS);
+  if (hits.length >= UPLOAD_LIMIT) {
+    res.status(429).json({ error: 'Слишком много загрузок. Попробуйте чуть позже.' });
+    return;
+  }
+  hits.push(now);
+  uploadHits.set(key, hits);
+  next();
+}
+
+function isSupportedImage(file) {
+  const buffer = fs.readFileSync(file.path);
+  if (buffer.length < 12) return false;
+  const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJpg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isGif = buffer.subarray(0, 6).toString('ascii') === 'GIF87a' || buffer.subarray(0, 6).toString('ascii') === 'GIF89a';
+  const isWebp = buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+  return isPng || isJpg || isGif || isWebp;
+}
+
+function rejectUpload(file, res, message) {
+  if (file) fs.unlink(file.path, () => {});
+  res.status(400).json({ error: message });
 }
 
 const storage = multer.diskStorage({
@@ -136,7 +210,7 @@ app.get('/api/settings', (_req, res) => {
 app.get('/api/magnets', (req, res) => {
   const includePending = isAdmin(req) && req.query.all === '1';
   const rows = db.prepare(`
-    SELECT id, file_name AS fileName, original_name AS originalName, caption, x, y, width, height, likes, status, created_at AS createdAt
+    SELECT id, file_name AS fileName, original_name AS originalName, caption, frame_style AS frameStyle, x, y, width, height, likes, status, created_at AS createdAt
     FROM magnets
     WHERE ${includePending ? '1 = 1' : "status = 'approved'"}
     ORDER BY created_at ASC
@@ -144,9 +218,13 @@ app.get('/api/magnets', (req, res) => {
   res.json(rows.map(row => ({ ...row, src: `/mems/${row.fileName}` })));
 });
 
-app.post('/api/magnets', upload.single('magnet'), (req, res) => {
+app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: 'Добавьте картинку магнита' });
+    return;
+  }
+  if (!isSupportedImage(req.file)) {
+    rejectUpload(req.file, res, 'Файл не похож на изображение PNG, JPG, GIF или WebP');
     return;
   }
 
@@ -160,12 +238,14 @@ app.post('/api/magnets', upload.single('magnet'), (req, res) => {
 
   const cfg = settings();
   const caption = String(req.body.caption || '').trim().slice(0, 30);
+  const frameStyle = cleanFrameStyle(req.body.frameStyle);
   const id = crypto.randomUUID();
   const row = {
     id,
     fileName: req.file.filename,
     originalName: req.file.originalname,
     caption,
+    frameStyle,
     x: Math.round(x),
     y: Math.round(y),
     width: Math.min(Math.max(Number(req.body.width) || 160, 80), 360),
@@ -175,15 +255,15 @@ app.post('/api/magnets', upload.single('magnet'), (req, res) => {
   };
 
   db.prepare(`
-    INSERT INTO magnets (id, file_name, original_name, caption, x, y, width, height, status)
-    VALUES (@id, @fileName, @originalName, @caption, @x, @y, @width, @height, @status)
+    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, x, y, width, height, status)
+    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @x, @y, @width, @height, @status)
   `).run(row);
 
   res.status(201).json({ ...row, src: `/mems/${row.fileName}` });
 });
 
 app.post('/api/magnets/:id/like', (req, res) => {
-  const voter = req.cookies.fridge_voter || crypto.randomUUID();
+  const voter = `${req.cookies.fridge_voter || crypto.randomUUID()}:${ipHash(req)}`;
   const magnet = db.prepare("SELECT id, likes FROM magnets WHERE id = ? AND status = 'approved'").get(req.params.id);
   if (!magnet) {
     res.status(404).json({ error: 'Магнит не найден' });
@@ -209,6 +289,7 @@ app.post('/api/admin/login', async (req, res) => {
     return;
   }
   req.session.admin = true;
+  logAdmin('login', { ip: ipHash(req) });
   res.json({ ok: true });
 });
 
@@ -229,6 +310,10 @@ app.use('/api/admin', (req, res, next) => {
 });
 
 app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
+  if (req.file && !isSupportedImage(req.file)) {
+    rejectUpload(req.file, res, 'Файл заголовка должен быть PNG, JPG, GIF или WebP');
+    return;
+  }
   if (typeof req.body.titleText === 'string') {
     setSetting.run('title_text', req.body.titleText.trim().slice(0, 80) || 'Наш холодильник');
   }
@@ -241,12 +326,37 @@ app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
   if (req.body.clearTitleImage === 'true') {
     setSetting.run('title_image', '');
   }
-  res.json(settings());
+  if (typeof req.body.titleColor === 'string') {
+    setSetting.run('title_color', cleanColor(req.body.titleColor));
+  }
+  if (typeof req.body.titleFont === 'string') {
+    setSetting.run('title_font', cleanTitleFont(req.body.titleFont));
+  }
+  const cfg = settings();
+  logAdmin('settings:update', cfg);
+  res.json(cfg);
 });
 
 app.patch('/api/admin/magnets/:id', (req, res) => {
-  const status = req.body.status === 'pending' ? 'pending' : 'approved';
-  const result = db.prepare('UPDATE magnets SET status = ? WHERE id = ?').run(status, req.params.id);
+  const current = db.prepare('SELECT * FROM magnets WHERE id = ?').get(req.params.id);
+  if (!current) {
+    res.status(404).json({ error: 'Магнит не найден' });
+    return;
+  }
+  const next = {
+    id: req.params.id,
+    status: typeof req.body.status === 'string' ? (req.body.status === 'pending' ? 'pending' : 'approved') : current.status,
+    x: Number.isFinite(Number(req.body.x)) ? Math.max(0, Math.round(Number(req.body.x))) : current.x,
+    y: Number.isFinite(Number(req.body.y)) ? Math.max(0, Math.round(Number(req.body.y))) : current.y,
+    caption: typeof req.body.caption === 'string' ? req.body.caption.trim().slice(0, 30) : current.caption,
+    frameStyle: typeof req.body.frameStyle === 'string' ? cleanFrameStyle(req.body.frameStyle) : current.frame_style
+  };
+  const result = db.prepare(`
+    UPDATE magnets
+    SET status = @status, x = @x, y = @y, caption = @caption, frame_style = @frameStyle
+    WHERE id = @id
+  `).run(next);
+  logAdmin('magnet:update', next);
   res.json({ ok: result.changes > 0 });
 });
 
@@ -259,7 +369,12 @@ app.delete('/api/admin/magnets/:id', (req, res) => {
   db.prepare('DELETE FROM liked_magnets WHERE magnet_id = ?').run(req.params.id);
   db.prepare('DELETE FROM magnets WHERE id = ?').run(req.params.id);
   fs.unlink(path.join(MEMS_DIR, row.fileName), () => {});
+  logAdmin('magnet:delete', { id: req.params.id, fileName: row.fileName });
   res.json({ ok: true });
+});
+
+app.get('/api/admin/logs', (_req, res) => {
+  res.json(db.prepare('SELECT id, action, details, created_at AS createdAt FROM admin_logs ORDER BY id DESC LIMIT 80').all());
 });
 
 app.get('/adminka', (_req, res) => {

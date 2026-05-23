@@ -52,6 +52,8 @@ button:hover {
   border: 1px solid rgba(39, 50, 58, 0.16);
   border-radius: 18px 18px 10px 10px;
   background:
+    linear-gradient(135deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 28px),
+    linear-gradient(45deg, rgba(40,58,68,0.035) 0 1px, transparent 1px 34px),
     linear-gradient(90deg, rgba(255,255,255,0.34), rgba(255,255,255,0) 16%, rgba(0,0,0,0.07) 84%, rgba(255,255,255,0.26)),
     linear-gradient(180deg, #eaf1f3 0, #dce8ec 52%, #cbd9df 100%);
   box-shadow: var(--shadow);
@@ -102,6 +104,18 @@ button:hover {
   letter-spacing: 0;
   color: #2a363b;
   text-shadow: 0 2px 0 rgba(255,255,255,0.9), 0 12px 26px rgba(55,76,86,0.18);
+}
+
+.title-font-classic {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.title-font-hand {
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+}
+
+.title-font-strict {
+  font-family: Georgia, "Times New Roman", serif;
 }
 
 .title-image {
@@ -178,6 +192,42 @@ button:hover {
   box-shadow: 0 8px 18px rgba(17, 31, 39, 0.2);
 }
 
+.magnet.moving {
+  z-index: 20;
+  outline: 3px solid #1656b8;
+}
+
+.magnet.frame-circle {
+  border-width: 7px;
+  border-radius: 999px;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.magnet.frame-circle img {
+  height: var(--w);
+  max-height: none;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.magnet.frame-circle .caption {
+  position: absolute;
+  left: 50%;
+  bottom: -34px;
+  width: 130%;
+  transform: translateX(-50%);
+}
+
+.magnet.frame-bare {
+  border: 0;
+  background: transparent;
+}
+
+.magnet.frame-bare img {
+  filter: drop-shadow(0 8px 14px rgba(17, 31, 39, 0.22));
+}
+
 .magnet.pending {
   opacity: 0.58;
   outline: 3px dashed #d84c62;
@@ -249,6 +299,71 @@ button:hover {
   opacity: 1;
 }
 
+.upload-dialog {
+  width: min(420px, calc(100% - 28px));
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(20, 35, 45, 0.35);
+}
+
+.upload-dialog::backdrop {
+  background: rgba(25, 38, 46, 0.46);
+}
+
+.upload-dialog form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.dialog-top,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dialog-top h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.upload-preview {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #edf3f5;
+}
+
+.upload-dialog label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.upload-dialog input,
+.upload-dialog select {
+  min-height: 42px;
+  border: 1px solid #cad5da;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #fff;
+}
+
 .admin-body {
   background: #f5f7f8;
 }
@@ -287,7 +402,8 @@ button:hover {
 }
 
 .form-row input,
-.settings-grid input:not([type="checkbox"]) {
+.settings-grid input:not([type="checkbox"]),
+.settings-grid select {
   width: 100%;
   min-height: 42px;
   border: 1px solid #cad5da;
@@ -328,6 +444,23 @@ button:hover {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 14px;
   margin-top: 16px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.filter-row button {
+  color: #24313a;
+  background: #dfe8ec;
+}
+
+.filter-row button.active {
+  color: #fff;
+  background: #27323a;
 }
 
 .admin-card {
@@ -372,6 +505,28 @@ button:hover {
   gap: 8px;
 }
 
+.logs-head {
+  margin-top: 26px;
+}
+
+.admin-logs {
+  display: grid;
+  gap: 7px;
+  max-height: 320px;
+  overflow: auto;
+  margin-top: 14px;
+  padding: 10px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.log-row {
+  overflow-wrap: anywhere;
+  color: #53636d;
+  font-size: 13px;
+}
+
 .danger {
   background: #b83242;
 }
@@ -389,6 +544,14 @@ button:hover {
   .fridge {
     min-height: calc(100vh - 16px);
     border-radius: 14px 14px 8px 8px;
+  }
+
+  .like {
+    min-width: 46px;
+    height: 42px;
+    right: -14px;
+    bottom: -22px;
+    font-size: 16px;
   }
 
   .fridge-header {

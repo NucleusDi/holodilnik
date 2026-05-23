@@ -31,6 +31,18 @@
           Картинка вместо надписи
           <input id="titleImageInput" name="titleImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
         </label>
+        <label>
+          Цвет надписи
+          <input id="titleColorInput" name="titleColor" type="color">
+        </label>
+        <label>
+          Шрифт надписи
+          <select id="titleFontInput" name="titleFont">
+            <option value="classic">Классический</option>
+            <option value="hand">Рукописный</option>
+            <option value="strict">Строгий</option>
+          </select>
+        </label>
         <label class="checkbox-row">
           <input id="moderationInput" name="moderation" type="checkbox">
           Модерация новых магнитов
@@ -46,7 +58,19 @@
         <h2>Магниты</h2>
         <button id="refresh" type="button">Обновить</button>
       </div>
+      <div class="filter-row" id="filterRow">
+        <button type="button" data-filter="all" class="active">Все</button>
+        <button type="button" data-filter="pending">На модерации</button>
+        <button type="button" data-filter="popular">Популярные</button>
+        <button type="button" data-filter="nocaption">Без подписи</button>
+      </div>
       <div id="adminMagnets" class="admin-magnets"></div>
+
+      <div class="admin-subhead logs-head">
+        <h2>Журнал</h2>
+        <button id="refreshLogs" type="button">Обновить</button>
+      </div>
+      <div id="adminLogs" class="admin-logs"></div>
     </section>
   </main>
 

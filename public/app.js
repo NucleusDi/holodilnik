@@ -7,9 +7,19 @@ const titleImage = document.querySelector('#titleImage');
 const mobileUpload = document.querySelector('#mobileUpload');
 const mobileUploadButton = document.querySelector('#mobileUploadButton');
 const mobileMagnetInput = document.querySelector('#mobileMagnetInput');
+const uploadDialog = document.querySelector('#uploadDialog');
+const uploadForm = document.querySelector('#uploadForm');
+const uploadPreview = document.querySelector('#uploadPreview');
+const captionInput = document.querySelector('#captionInput');
+const frameStyleInput = document.querySelector('#frameStyleInput');
+const cancelUpload = document.querySelector('#cancelUpload');
+const closeUploadDialog = document.querySelector('#closeUploadDialog');
 
 let magnets = [];
-let pendingMobileFile = null;
+let pendingUpload = null;
+let uploadDialogResolve = null;
+let adminMode = false;
+let adminDrag = null;
 
 function showToast(message) {
   toast.textContent = message;
@@ -19,7 +29,7 @@ function showToast(message) {
 }
 
 function resetMobilePlacement() {
-  pendingMobileFile = null;
+  pendingUpload = null;
   fridge.classList.remove('placing');
   mobileUpload.classList.remove('placing');
   mobileUploadButton.textContent = 'Выбрать магнит';
@@ -43,7 +53,7 @@ function rotationFor(id) {
 
 function renderMagnet(magnet) {
   const el = document.createElement('article');
-  el.className = `magnet ${magnet.status === 'pending' ? 'pending' : ''}`;
+  el.className = `magnet frame-${magnet.frameStyle || 'polaroid'} ${magnet.status === 'pending' ? 'pending' : ''}`;
   el.style.left = `${magnet.x}px`;
   el.style.top = `${magnet.y}px`;
   el.style.setProperty('--w', `${magnet.width}px`);
@@ -75,6 +85,21 @@ function renderMagnet(magnet) {
     }
   });
 
+  el.addEventListener('pointerdown', (event) => {
+    if (!adminMode || event.target.closest('.like')) return;
+    event.preventDefault();
+    const rect = el.getBoundingClientRect();
+    adminDrag = {
+      id: magnet.id,
+      element: el,
+      magnet,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    el.setPointerCapture(event.pointerId);
+    el.classList.add('moving');
+  });
+
   el.append(img, caption, like);
   magnetsLayer.append(el);
 }
@@ -93,6 +118,8 @@ async function loadAll() {
 
   document.title = cfg.titleText || 'Наш холодильник';
   titleText.textContent = cfg.titleText || 'Наш холодильник';
+  titleText.style.color = cfg.titleColor || '#2a363b';
+  titleText.className = `title-font-${cfg.titleFont || 'classic'}`;
   if (cfg.titleImage) {
     titleImage.src = cfg.titleImage;
     titleImage.hidden = false;
@@ -106,6 +133,9 @@ async function loadAll() {
   magnetsLayer.replaceChildren();
   magnets.forEach(renderMagnet);
   growFridge();
+  const me = await request('/api/admin/me').catch(() => ({ admin: false }));
+  adminMode = Boolean(me.admin);
+  if (adminMode) showToast('Админ-режим: магниты можно перетаскивать');
 }
 
 function imageSize(file) {
@@ -125,25 +155,69 @@ function imageSize(file) {
   });
 }
 
-async function uploadAt(file, clientX, clientY) {
+async function compressImage(file) {
+  if (file.type === 'image/gif' || file.size < 900 * 1024) return file;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = url;
+  });
+  URL.revokeObjectURL(url);
+  const maxSide = 1600;
+  const scale = Math.min(maxSide / img.naturalWidth, maxSide / img.naturalHeight, 1);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+}
+
+function showUploadDialog(file) {
+  uploadPreview.src = URL.createObjectURL(file);
+  captionInput.value = '';
+  frameStyleInput.value = 'polaroid';
+  uploadDialog.showModal();
+  captionInput.focus();
+  return new Promise(resolve => {
+    uploadDialogResolve = (value) => {
+      URL.revokeObjectURL(uploadPreview.src);
+      uploadDialog.close();
+      uploadDialogResolve = null;
+      resolve(value);
+    };
+  });
+}
+
+async function prepareUpload(file) {
   if (!file || !file.type.startsWith('image/')) {
     showToast('Нужна картинка: PNG, JPG, GIF или WebP');
-    return;
+    return null;
   }
+  const compressed = await compressImage(file);
+  const size = await imageSize(compressed);
+  const details = await showUploadDialog(compressed);
+  if (!details) return null;
+  return { file: compressed, size, ...details };
+}
 
-  const caption = (window.prompt('Подпись под магнитом, до 30 символов', '') || '').trim().slice(0, 30);
+async function uploadAt(upload, clientX, clientY) {
+  if (!upload) return;
   const rect = fridge.getBoundingClientRect();
-  const size = await imageSize(file);
+  const size = upload.size;
   const x = Math.max(16, clientX - rect.left - size.width / 2);
   const y = Math.max(130, clientY - rect.top - size.height / 2);
 
   const form = new FormData();
-  form.append('magnet', file);
+  form.append('magnet', upload.file);
   form.append('x', String(Math.round(x)));
   form.append('y', String(Math.round(y)));
   form.append('width', String(size.width));
   form.append('height', String(size.height));
-  form.append('caption', caption);
+  form.append('caption', upload.caption);
+  form.append('frameStyle', upload.frameStyle);
 
   const magnet = await request('/api/magnets', { method: 'POST', body: form });
   if (magnet.status === 'approved') {
@@ -173,44 +247,92 @@ fridge.addEventListener('drop', async (event) => {
   dropHint.classList.remove('active');
   dropHint.textContent = 'Перетащите картинку на холодильник';
   try {
-    await uploadAt(event.dataTransfer.files[0], event.clientX, event.clientY);
+    const upload = await prepareUpload(event.dataTransfer.files[0]);
+    await uploadAt(upload, event.clientX, event.clientY);
   } catch (error) {
     showToast(error.message);
   }
 });
 
 mobileUploadButton.addEventListener('click', () => {
-  if (pendingMobileFile) {
+  if (pendingUpload) {
     resetMobilePlacement();
     return;
   }
   mobileMagnetInput.click();
 });
 
-mobileMagnetInput.addEventListener('change', () => {
+mobileMagnetInput.addEventListener('change', async () => {
   const file = mobileMagnetInput.files[0];
   mobileMagnetInput.value = '';
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    showToast('Нужна картинка: PNG, JPG, GIF или WebP');
-    return;
-  }
-  pendingMobileFile = file;
-  fridge.classList.add('placing');
-  mobileUpload.classList.add('placing');
-  mobileUploadButton.textContent = 'Отменить';
-  dropHint.textContent = 'Тапните место для магнита';
-  showToast('Теперь тапните по холодильнику');
-});
-
-fridge.addEventListener('click', async (event) => {
-  if (!pendingMobileFile) return;
-  if (event.target.closest('.magnet') || event.target.closest('.mobile-upload')) return;
   try {
-    await uploadAt(pendingMobileFile, event.clientX, event.clientY);
+    pendingUpload = await prepareUpload(file);
+    if (!pendingUpload) return;
+    fridge.classList.add('placing');
+    mobileUpload.classList.add('placing');
+    mobileUploadButton.textContent = 'Отменить';
+    dropHint.textContent = 'Тапните место для магнита';
+    showToast('Теперь тапните по холодильнику');
   } catch (error) {
     showToast(error.message);
     resetMobilePlacement();
+  }
+});
+
+fridge.addEventListener('click', async (event) => {
+  if (!pendingUpload) return;
+  if (event.target.closest('.magnet') || event.target.closest('.mobile-upload')) return;
+  try {
+    await uploadAt(pendingUpload, event.clientX, event.clientY);
+  } catch (error) {
+    showToast(error.message);
+    resetMobilePlacement();
+  }
+});
+
+uploadForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!uploadDialogResolve) return;
+  uploadDialogResolve({
+    caption: captionInput.value.trim().slice(0, 30),
+    frameStyle: frameStyleInput.value
+  });
+});
+
+cancelUpload.addEventListener('click', () => uploadDialogResolve?.(null));
+closeUploadDialog.addEventListener('click', () => uploadDialogResolve?.(null));
+
+window.addEventListener('pointermove', (event) => {
+  if (!adminDrag) return;
+  const rect = fridge.getBoundingClientRect();
+  const x = Math.max(8, event.clientX - rect.left - adminDrag.offsetX);
+  const y = Math.max(8, event.clientY - rect.top - adminDrag.offsetY);
+  adminDrag.element.style.left = `${x}px`;
+  adminDrag.element.style.top = `${y}px`;
+});
+
+window.addEventListener('pointerup', async () => {
+  if (!adminDrag) return;
+  const drag = adminDrag;
+  adminDrag = null;
+  drag.element.classList.remove('moving');
+  const x = Math.round(parseFloat(drag.element.style.left));
+  const y = Math.round(parseFloat(drag.element.style.top));
+  try {
+    await request(`/api/admin/magnets/${drag.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x, y })
+    });
+    drag.magnet.x = x;
+    drag.magnet.y = y;
+    growFridge();
+    showToast('Позиция сохранена');
+  } catch (error) {
+    drag.element.style.left = `${drag.magnet.x}px`;
+    drag.element.style.top = `${drag.magnet.y}px`;
+    showToast(error.message);
   }
 });
 

@@ -19,13 +19,39 @@
       </div>
 
       <div class="mobile-upload" id="mobileUpload">
-        <input id="mobileMagnetInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+        <input id="mobileMagnetInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" capture="environment" hidden>
         <button id="mobileUploadButton" type="button">Выбрать магнит</button>
       </div>
 
       <div id="magnets" class="magnets"></div>
     </section>
   </main>
+
+  <dialog id="uploadDialog" class="upload-dialog">
+    <form id="uploadForm" method="dialog">
+      <div class="dialog-top">
+        <h2>Новый магнит</h2>
+        <button id="closeUploadDialog" class="icon-button" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <img id="uploadPreview" class="upload-preview" alt="">
+      <label>
+        Подпись
+        <input id="captionInput" maxlength="30" placeholder="До 30 символов">
+      </label>
+      <label>
+        Вид
+        <select id="frameStyleInput">
+          <option value="polaroid">Полароид</option>
+          <option value="circle">Круглый</option>
+          <option value="bare">Без рамки</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button id="cancelUpload" class="secondary" type="button">Отмена</button>
+        <button id="confirmUpload" type="submit">Продолжить</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/app.js"></script>

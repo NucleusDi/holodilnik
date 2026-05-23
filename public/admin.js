@@ -6,11 +6,19 @@ const logout = document.querySelector('#logout');
 const settingsForm = document.querySelector('#settingsForm');
 const titleTextInput = document.querySelector('#titleTextInput');
 const titleImageInput = document.querySelector('#titleImageInput');
+const titleColorInput = document.querySelector('#titleColorInput');
+const titleFontInput = document.querySelector('#titleFontInput');
 const moderationInput = document.querySelector('#moderationInput');
 const clearTitleImage = document.querySelector('#clearTitleImage');
 const refresh = document.querySelector('#refresh');
 const adminMagnets = document.querySelector('#adminMagnets');
+const filterRow = document.querySelector('#filterRow');
+const refreshLogs = document.querySelector('#refreshLogs');
+const adminLogs = document.querySelector('#adminLogs');
 const toast = document.querySelector('#toast');
+
+let allMagnets = [];
+let activeFilter = 'all';
 
 function showToast(message) {
   toast.textContent = message;
@@ -36,6 +44,8 @@ function setAuthed(admin) {
 async function loadSettings() {
   const cfg = await request('/api/settings');
   titleTextInput.value = cfg.titleText || 'Наш холодильник';
+  titleColorInput.value = cfg.titleColor || '#2a363b';
+  titleFontInput.value = cfg.titleFont || 'classic';
   moderationInput.checked = Boolean(cfg.moderation);
 }
 
@@ -50,7 +60,7 @@ function card(magnet) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  meta.innerHTML = `<span>${magnet.status === 'pending' ? 'на модерации' : 'опубликован'}</span><span>♥ ${magnet.likes}</span>`;
+  meta.innerHTML = `<span>${magnet.status === 'pending' ? 'на модерации' : 'опубликован'}</span><span>${magnet.frameStyle || 'polaroid'} · ♥ ${magnet.likes}</span>`;
 
   const caption = document.createElement('div');
   caption.className = 'admin-caption';
@@ -97,18 +107,34 @@ function card(magnet) {
 }
 
 async function loadMagnets() {
-  const rows = await request('/api/magnets?all=1');
+  allMagnets = await request('/api/magnets?all=1');
+  let rows = [...allMagnets];
+  if (activeFilter === 'pending') rows = rows.filter(magnet => magnet.status === 'pending');
+  if (activeFilter === 'popular') rows.sort((a, b) => b.likes - a.likes);
+  if (activeFilter === 'nocaption') rows = rows.filter(magnet => !magnet.caption);
   adminMagnets.replaceChildren(...rows.map(card));
   if (!rows.length) {
     adminMagnets.textContent = 'Магнитов пока нет.';
   }
 }
 
+async function loadLogs() {
+  const rows = await request('/api/admin/logs');
+  adminLogs.replaceChildren(...rows.map(row => {
+    const el = document.createElement('div');
+    el.className = 'log-row';
+    const details = row.details && row.details !== '{}' ? ` · ${row.details}` : '';
+    el.textContent = `${row.createdAt} · ${row.action}${details}`;
+    return el;
+  }));
+  if (!rows.length) adminLogs.textContent = 'Журнал пока пуст.';
+}
+
 async function boot() {
   const me = await request('/api/admin/me');
   setAuthed(me.admin);
   if (me.admin) {
-    await Promise.all([loadSettings(), loadMagnets()]);
+    await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
   }
 }
 
@@ -122,7 +148,7 @@ loginForm.addEventListener('submit', async (event) => {
     });
     password.value = '';
     setAuthed(true);
-    await Promise.all([loadSettings(), loadMagnets()]);
+    await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
   } catch (error) {
     showToast(error.message);
   }
@@ -137,6 +163,8 @@ settingsForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = new FormData();
   form.append('titleText', titleTextInput.value);
+  form.append('titleColor', titleColorInput.value);
+  form.append('titleFont', titleFontInput.value);
   form.append('moderation', String(moderationInput.checked));
   form.append('clearTitleImage', String(clearTitleImage.checked));
   if (titleImageInput.files[0]) {
@@ -153,4 +181,12 @@ settingsForm.addEventListener('submit', async (event) => {
 });
 
 refresh.addEventListener('click', () => loadMagnets().catch(error => showToast(error.message)));
+refreshLogs.addEventListener('click', () => loadLogs().catch(error => showToast(error.message)));
+filterRow.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-filter]');
+  if (!button) return;
+  activeFilter = button.dataset.filter;
+  filterRow.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+  loadMagnets().catch(error => showToast(error.message));
+});
 boot().catch(() => setAuthed(false));
