@@ -18,6 +18,7 @@ const closeUploadDialog = document.querySelector('#closeUploadDialog');
 let magnets = [];
 let pendingUpload = null;
 let uploadDialogResolve = null;
+let selectedFrameStyle = 'polaroid';
 let adminMode = false;
 let adminDrag = null;
 
@@ -178,7 +179,7 @@ async function compressImage(file) {
 function showUploadDialog(file) {
   uploadPreview.src = URL.createObjectURL(file);
   captionInput.value = '';
-  frameStyleInput.value = 'polaroid';
+  setSelectedFrameStyle('polaroid');
   uploadDialog.showModal();
   captionInput.focus();
   return new Promise(resolve => {
@@ -189,6 +190,16 @@ function showUploadDialog(file) {
       resolve(value);
     };
   });
+}
+
+function setSelectedFrameStyle(frameStyle) {
+  selectedFrameStyle = ['polaroid', 'circle', 'bare'].includes(frameStyle) ? frameStyle : 'polaroid';
+  frameStyleInput.querySelectorAll('[data-frame-style]').forEach(button => {
+    const active = button.dataset.frameStyle === selectedFrameStyle;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  uploadPreview.className = `upload-preview preview-${selectedFrameStyle}`;
 }
 
 async function prepareUpload(file) {
@@ -296,12 +307,17 @@ uploadForm.addEventListener('submit', (event) => {
   if (!uploadDialogResolve) return;
   uploadDialogResolve({
     caption: captionInput.value.trim().slice(0, 30),
-    frameStyle: frameStyleInput.value
+    frameStyle: selectedFrameStyle
   });
 });
 
 cancelUpload.addEventListener('click', () => uploadDialogResolve?.(null));
 closeUploadDialog.addEventListener('click', () => uploadDialogResolve?.(null));
+frameStyleInput.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-frame-style]');
+  if (!button) return;
+  setSelectedFrameStyle(button.dataset.frameStyle);
+});
 
 window.addEventListener('pointermove', (event) => {
   if (!adminDrag) return;

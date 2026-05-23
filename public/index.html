@@ -38,14 +38,11 @@
         Подпись
         <input id="captionInput" maxlength="30" placeholder="До 30 символов">
       </label>
-      <label>
-        Вид
-        <select id="frameStyleInput">
-          <option value="polaroid">Полароид</option>
-          <option value="circle">Круглый</option>
-          <option value="bare">Без рамки</option>
-        </select>
-      </label>
+      <div class="frame-choice" id="frameStyleInput" role="radiogroup" aria-label="Вид магнита">
+        <button type="button" class="active" data-frame-style="polaroid" aria-checked="true">Полароид</button>
+        <button type="button" data-frame-style="circle" aria-checked="false">Круглый</button>
+        <button type="button" data-frame-style="bare" aria-checked="false">Без рамки</button>
+      </div>
       <div class="dialog-actions">
         <button id="cancelUpload" class="secondary" type="button">Отмена</button>
         <button id="confirmUpload" type="submit">Продолжить</button>

@@ -238,7 +238,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
 
   const cfg = settings();
   const caption = String(req.body.caption || '').trim().slice(0, 30);
-  const frameStyle = cleanFrameStyle(req.body.frameStyle);
+  const frameStyle = cleanFrameStyle(req.body.frameStyle || req.body.frame_style);
   const id = crypto.randomUUID();
   const row = {
     id,
