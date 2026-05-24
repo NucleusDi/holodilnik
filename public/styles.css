@@ -232,6 +232,10 @@ button:hover {
   transform: translateX(110%) skewX(-16deg);
 }
 
+.magnet.frame-mini:hover .magnet-media::after {
+  opacity: 0;
+}
+
 .frame-color-white {
   --frame-color: #fff;
 }
@@ -811,6 +815,10 @@ button:hover {
     display: flex;
   }
 
+  .drop-hint {
+    display: none;
+  }
+
   .settings-grid,
   .admin-actions {
     grid-template-columns: 1fr;
@@ -832,5 +840,9 @@ button:hover {
 @media (pointer: coarse) {
   .mobile-upload {
     display: flex;
+  }
+
+  .drop-hint {
+    display: none;
   }
 }
