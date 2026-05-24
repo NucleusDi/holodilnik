@@ -81,15 +81,21 @@ button:hover {
 .fridge::after {
   content: "";
   position: absolute;
-  top: 16px;
-  right: 18px;
-  width: 12px;
-  height: calc(100% - 32px);
+  top: 28px;
+  right: 22px;
+  width: 24px;
+  height: calc(100% - 56px);
   min-height: 75vh;
   border-radius: 999px;
-  background: linear-gradient(90deg, #fefefe, #bbcbd2);
-  box-shadow: inset 1px 0 1px rgba(255,255,255,0.8), -12px 0 20px rgba(28,45,55,0.04);
-  opacity: 0.72;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.28), transparent 18%, rgba(0,0,0,0.26) 74%, rgba(255,255,255,0.1)),
+    linear-gradient(180deg, #5b6870 0%, #26343d 18%, #1b2730 52%, #34434c 100%);
+  box-shadow:
+    inset 3px 0 4px rgba(255,255,255,0.18),
+    inset -5px 0 8px rgba(0,0,0,0.34),
+    -16px 0 22px rgba(19,35,45,0.18),
+    0 10px 18px rgba(19,35,45,0.18);
+  opacity: 0.94;
 }
 
 .fridge-header {
