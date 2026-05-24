@@ -109,7 +109,7 @@ function ipHash(req) {
 }
 
 function cleanFrameStyle(value) {
-  return ['polaroid', 'circle'].includes(value) ? value : 'polaroid';
+  return ['polaroid', 'circle', 'mini'].includes(value) ? value : 'polaroid';
 }
 
 function cleanFrameColor(value) {
@@ -245,9 +245,9 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
   }
 
   const cfg = settings();
-  const caption = String(req.body.caption || '').trim().slice(0, 30);
   const frameStyle = cleanFrameStyle(req.body.frameStyle || req.body.frame_style);
-  const frameColor = cleanFrameColor(req.body.frameColor || req.body.frame_color);
+  const caption = frameStyle === 'mini' ? '' : String(req.body.caption || '').trim().slice(0, 30);
+  const frameColor = frameStyle === 'mini' ? 'white' : cleanFrameColor(req.body.frameColor || req.body.frame_color);
   const id = crypto.randomUUID();
   const row = {
     id,
@@ -274,9 +274,13 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
 
 app.post('/api/magnets/:id/like', (req, res) => {
   const voter = `${req.cookies.fridge_voter || crypto.randomUUID()}:${ipHash(req)}`;
-  const magnet = db.prepare("SELECT id, likes FROM magnets WHERE id = ? AND status = 'approved'").get(req.params.id);
+  const magnet = db.prepare("SELECT id, likes, frame_style AS frameStyle FROM magnets WHERE id = ? AND status = 'approved'").get(req.params.id);
   if (!magnet) {
     res.status(404).json({ error: 'Магнит не найден' });
+    return;
+  }
+  if (magnet.frameStyle === 'mini') {
+    res.status(400).json({ error: 'Мини-магниты нельзя лайкать' });
     return;
   }
 

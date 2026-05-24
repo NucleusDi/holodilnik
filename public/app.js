@@ -7,6 +7,7 @@ const titleImage = document.querySelector('#titleImage');
 const mobileUpload = document.querySelector('#mobileUpload');
 const mobileGalleryButton = document.querySelector('#mobileGalleryButton');
 const mobileCameraButton = document.querySelector('#mobileCameraButton');
+const mobilePasteButton = document.querySelector('#mobilePasteButton');
 const mobileCancelButton = document.querySelector('#mobileCancelButton');
 const mobileGalleryInput = document.querySelector('#mobileGalleryInput');
 const mobileCameraInput = document.querySelector('#mobileCameraInput');
@@ -46,6 +47,7 @@ function resetMobilePlacement() {
   mobileUpload.classList.remove('placing');
   mobileGalleryButton.hidden = false;
   mobileCameraButton.hidden = false;
+  mobilePasteButton.hidden = false;
   mobileCancelButton.hidden = true;
   dropHint.textContent = 'Перетащите картинку на холодильник';
 }
@@ -67,7 +69,7 @@ function rotationFor(id) {
 
 function renderMagnet(magnet) {
   const el = document.createElement('article');
-  const frameStyle = ['polaroid', 'circle'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
+  const frameStyle = ['polaroid', 'circle', 'mini'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
   const frameColor = magnet.frameColor || 'white';
   el.className = `magnet frame-${frameStyle} frame-color-${frameColor} ${magnet.status === 'pending' ? 'pending' : ''}`;
   el.style.left = `${magnet.x * fridgeScale}px`;
@@ -98,22 +100,25 @@ function renderMagnet(magnet) {
 
   const caption = document.createElement('p');
   caption.className = 'caption';
-  caption.textContent = magnet.caption || '';
-  caption.hidden = !magnet.caption;
+  caption.textContent = frameStyle === 'mini' ? '' : (magnet.caption || '');
+  caption.hidden = frameStyle === 'mini' || !magnet.caption;
 
-  const like = document.createElement('button');
-  like.className = 'like';
-  like.type = 'button';
-  like.textContent = magnet.likes;
-  like.addEventListener('click', async (event) => {
-    event.stopPropagation();
-    try {
-      const result = await request(`/api/magnets/${magnet.id}/like`, { method: 'POST' });
-      like.textContent = result.likes;
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
+  let like = null;
+  if (frameStyle !== 'mini') {
+    like = document.createElement('button');
+    like.className = 'like';
+    like.type = 'button';
+    like.textContent = magnet.likes;
+    like.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      try {
+        const result = await request(`/api/magnets/${magnet.id}/like`, { method: 'POST' });
+        like.textContent = result.likes;
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+  }
 
   el.addEventListener('pointerdown', (event) => {
     if (!adminMode || event.target.closest('.like')) return;
@@ -130,7 +135,8 @@ function renderMagnet(magnet) {
     el.classList.add('moving');
   });
 
-  el.append(media, caption, like);
+  el.append(media, caption);
+  if (like) el.append(like);
   magnetsLayer.append(el);
 }
 
@@ -286,6 +292,20 @@ async function prepareUpload(file) {
   return { file: compressed, size, ...details };
 }
 
+async function readClipboardImage() {
+  if (!navigator.clipboard?.read) {
+    throw new Error('Браузер не дал доступ к картинке из буфера');
+  }
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    const type = item.types.find(value => value.startsWith('image/'));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    return new File([blob], `mini-magnet.${type.split('/')[1] || 'png'}`, { type });
+  }
+  throw new Error('В буфере обмена нет картинки');
+}
+
 async function uploadAt(upload, clientX, clientY) {
   if (!upload) return;
   const point = pointToFridge(clientX, clientY);
@@ -357,6 +377,7 @@ async function handleMobileFile(input) {
     mobileUpload.classList.add('placing');
     mobileGalleryButton.hidden = true;
     mobileCameraButton.hidden = true;
+    mobilePasteButton.hidden = true;
     mobileCancelButton.hidden = false;
     dropHint.textContent = 'Тапните место для магнита';
     showToast('Теперь тапните по холодильнику');
@@ -368,6 +389,34 @@ async function handleMobileFile(input) {
 
 mobileGalleryButton.addEventListener('click', () => chooseMobileFile(mobileGalleryInput));
 mobileCameraButton.addEventListener('click', () => chooseMobileFile(mobileCameraInput));
+mobilePasteButton.addEventListener('click', async () => {
+  if (pendingUpload) {
+    resetMobilePlacement();
+    return;
+  }
+  try {
+    const file = await readClipboardImage();
+    const compressed = await compressImage(file);
+    const size = await imageSize(compressed);
+    pendingUpload = {
+      file: compressed,
+      size,
+      caption: '',
+      frameStyle: 'mini',
+      frameColor: 'white'
+    };
+    fridge.classList.add('placing');
+    mobileUpload.classList.add('placing');
+    mobileGalleryButton.hidden = true;
+    mobileCameraButton.hidden = true;
+    mobilePasteButton.hidden = true;
+    mobileCancelButton.hidden = false;
+    dropHint.textContent = 'Тапните место для мини-магнита';
+    showToast('Мини-магнит готов. Тапните по холодильнику');
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 mobileCancelButton.addEventListener('click', resetMobilePlacement);
 mobileGalleryInput.addEventListener('change', () => handleMobileFile(mobileGalleryInput));
 mobileCameraInput.addEventListener('change', () => handleMobileFile(mobileCameraInput));
