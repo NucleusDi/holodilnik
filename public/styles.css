@@ -192,6 +192,24 @@ button:hover {
   box-shadow: 0 8px 18px rgba(17, 31, 39, 0.2);
 }
 
+.magnet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 34%, rgba(255,255,255,0.62) 47%, rgba(255,255,255,0.24) 52%, transparent 64%);
+  border-radius: inherit;
+  opacity: 0;
+  transform: translateX(-110%) skewX(-16deg);
+  transition: opacity 0.18s ease, transform 0.62s ease;
+}
+
+.magnet:hover::after {
+  opacity: 1;
+  transform: translateX(110%) skewX(-16deg);
+}
+
 .frame-color-white {
   --frame-color: #fff;
 }
@@ -233,6 +251,12 @@ button:hover {
   border-width: 7px;
   border-radius: 999px;
   aspect-ratio: 1;
+  overflow: visible;
+}
+
+.magnet.frame-circle::after {
+  border-radius: 999px;
+  clip-path: circle(50% at 50% 50%);
 }
 
 .magnet.frame-circle img {
@@ -257,6 +281,11 @@ button:hover {
   border-radius: 6px;
   background: #fffdf3;
   box-shadow: 0 5px 12px rgba(17, 31, 39, 0.16);
+}
+
+.magnet.frame-circle .like {
+  right: -4px;
+  bottom: 10px;
 }
 
 .magnet.pending {
@@ -291,6 +320,7 @@ button:hover {
   position: absolute;
   right: -12px;
   bottom: -18px;
+  z-index: 4;
   display: inline-grid;
   min-width: 38px;
   height: 34px;
