@@ -52,11 +52,13 @@ button:hover {
   border: 1px solid rgba(39, 50, 58, 0.16);
   border-radius: 18px 18px 10px 10px;
   background:
-    linear-gradient(135deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 28px),
-    linear-gradient(45deg, rgba(40,58,68,0.035) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(98deg, rgba(42,61,70,0.045) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(8deg, transparent 0 34px, rgba(255,255,255,0.16) 34px 35px, transparent 35px 92px),
+    linear-gradient(135deg, rgba(255,255,255,0.09) 0 1px, transparent 1px 28px),
+    linear-gradient(45deg, rgba(40,58,68,0.045) 0 1px, transparent 1px 34px),
     linear-gradient(90deg, rgba(255,255,255,0.34), rgba(255,255,255,0) 16%, rgba(0,0,0,0.07) 84%, rgba(255,255,255,0.26)),
     linear-gradient(180deg, #eaf1f3 0, #dce8ec 52%, #cbd9df 100%);
-  box-shadow: var(--shadow);
+  box-shadow: 0 20px 50px rgba(20, 35, 45, 0.22), inset 0 1px 0 rgba(255,255,255,0.64), inset 0 -24px 50px rgba(58,78,88,0.05);
 }
 
 .fridge::before {
@@ -67,10 +69,13 @@ button:hover {
   height: 100vh;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.66), rgba(255,255,255,0) 24%),
-    radial-gradient(circle at 18% 16%, rgba(255,255,255,0.75), transparent 24%),
-    linear-gradient(90deg, transparent, rgba(70,90,100,0.08) 50%, transparent);
+    repeating-linear-gradient(172deg, transparent 0 72px, rgba(52,71,80,0.06) 72px 73px, transparent 73px 145px),
+    repeating-linear-gradient(88deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 18px),
+    linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0) 24%),
+    radial-gradient(circle at 18% 16%, rgba(255,255,255,0.68), transparent 24%),
+    linear-gradient(90deg, transparent, rgba(70,90,100,0.1) 50%, transparent);
   border-radius: inherit;
+  opacity: 0.86;
 }
 
 .fridge::after {
@@ -189,7 +194,7 @@ button:hover {
   border-bottom-width: 18px;
   border-radius: 7px;
   background: var(--frame-color, #fff);
-  box-shadow: 0 8px 18px rgba(17, 31, 39, 0.2);
+  box-shadow: 0 16px 28px rgba(17, 31, 39, 0.34), 0 5px 9px rgba(17, 31, 39, 0.24);
 }
 
 .magnet-media {
