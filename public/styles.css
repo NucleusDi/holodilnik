@@ -452,6 +452,54 @@ button:hover {
   background: #fff;
 }
 
+.image-dialog {
+  width: min(1120px, calc(100% - 24px));
+  max-height: calc(100vh - 24px);
+  border: 0;
+  border-radius: 8px;
+  padding: 18px;
+  color: #fff;
+  background: rgba(18, 27, 34, 0.96);
+  box-shadow: 0 24px 90px rgba(0,0,0,0.46);
+}
+
+.image-dialog::backdrop {
+  background: rgba(8, 13, 17, 0.72);
+}
+
+.image-dialog img {
+  display: block;
+  width: 100%;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+}
+
+.image-dialog p {
+  margin: 12px 42px 0;
+  overflow-wrap: anywhere;
+  color: #9fc3ff;
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.image-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  background: rgba(255,255,255,0.16);
+}
+
+.image-close:hover {
+  background: rgba(255,255,255,0.25);
+}
+
 .frame-choice {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

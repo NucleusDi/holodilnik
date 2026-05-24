@@ -18,6 +18,10 @@ const frameStyleInput = document.querySelector('#frameStyleInput');
 const frameColorInput = document.querySelector('#frameColorInput');
 const cancelUpload = document.querySelector('#cancelUpload');
 const closeUploadDialog = document.querySelector('#closeUploadDialog');
+const imageDialog = document.querySelector('#imageDialog');
+const imageDialogImg = document.querySelector('#imageDialogImg');
+const imageDialogCaption = document.querySelector('#imageDialogCaption');
+const closeImageDialog = document.querySelector('#closeImageDialog');
 
 let magnets = [];
 let pendingUpload = null;
@@ -27,6 +31,7 @@ let selectedFrameColor = 'white';
 let adminMode = false;
 let adminDrag = null;
 let fridgeScale = 1;
+let suppressImageOpen = false;
 
 function showToast(message) {
   toast.textContent = message;
@@ -82,6 +87,14 @@ function renderMagnet(magnet) {
   img.alt = magnet.originalName || 'Магнит';
   img.loading = 'lazy';
   media.append(img);
+  media.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (suppressImageOpen) {
+      suppressImageOpen = false;
+      return;
+    }
+    openImageDialog(magnet);
+  });
 
   const caption = document.createElement('p');
   caption.className = 'caption';
@@ -119,6 +132,14 @@ function renderMagnet(magnet) {
 
   el.append(media, caption, like);
   magnetsLayer.append(el);
+}
+
+function openImageDialog(magnet) {
+  imageDialogImg.src = magnet.src;
+  imageDialogImg.alt = magnet.caption || magnet.originalName || 'Магнит';
+  imageDialogCaption.textContent = magnet.caption || '';
+  imageDialogCaption.hidden = !magnet.caption;
+  imageDialog.showModal();
 }
 
 function growFridge() {
@@ -374,6 +395,10 @@ uploadForm.addEventListener('submit', (event) => {
 
 cancelUpload.addEventListener('click', () => uploadDialogResolve?.(null));
 closeUploadDialog.addEventListener('click', () => uploadDialogResolve?.(null));
+closeImageDialog.addEventListener('click', () => imageDialog.close());
+imageDialog.addEventListener('click', (event) => {
+  if (event.target === imageDialog) imageDialog.close();
+});
 frameStyleInput.addEventListener('click', (event) => {
   const button = event.target.closest('[data-frame-style]');
   if (!button) return;
@@ -390,6 +415,9 @@ window.addEventListener('pointermove', (event) => {
   const point = pointToFridge(event.clientX, event.clientY);
   const x = Math.max(8, point.x - adminDrag.offsetX);
   const y = Math.max(8, point.y - adminDrag.offsetY);
+  if (Math.abs(x - adminDrag.magnet.x) > 2 || Math.abs(y - adminDrag.magnet.y) > 2) {
+    adminDrag.moved = true;
+  }
   adminDrag.element.style.left = `${x * fridgeScale}px`;
   adminDrag.element.style.top = `${y * fridgeScale}px`;
 });
@@ -398,6 +426,7 @@ window.addEventListener('pointerup', async () => {
   if (!adminDrag) return;
   const drag = adminDrag;
   adminDrag = null;
+  suppressImageOpen = Boolean(drag.moved);
   drag.element.classList.remove('moving');
   const x = Math.round(parseFloat(drag.element.style.left) / fridgeScale);
   const y = Math.round(parseFloat(drag.element.style.top) / fridgeScale);
