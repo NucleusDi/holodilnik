@@ -126,6 +126,12 @@ function cleanTitleFont(value) {
 
 function logAdmin(action, details = {}) {
   db.prepare('INSERT INTO admin_logs (action, details) VALUES (?, ?)').run(action, JSON.stringify(details));
+  db.prepare(`
+    DELETE FROM admin_logs
+    WHERE id NOT IN (
+      SELECT id FROM admin_logs ORDER BY id DESC LIMIT 500
+    )
+  `).run();
 }
 
 function checkUploadRate(req, res, next) {
@@ -269,6 +275,15 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status)
   `).run(row);
 
+  logAdmin('magnet:add', {
+    id,
+    fileName: row.fileName,
+    frameStyle: row.frameStyle,
+    frameColor: row.frameColor,
+    status: row.status,
+    ip: ipHash(req)
+  });
+
   res.status(201).json({ ...row, src: `/mems/${row.fileName}` });
 });
 
@@ -411,6 +426,16 @@ app.delete('/api/admin/magnets', (req, res) => {
 
 app.get('/api/admin/logs', (_req, res) => {
   res.json(db.prepare('SELECT id, action, details, created_at AS createdAt FROM admin_logs ORDER BY id DESC LIMIT 80').all());
+});
+
+app.delete('/api/admin/logs', (req, res) => {
+  if (req.body?.confirm !== 'ОЧИСТИТЬ ЖУРНАЛ') {
+    res.status(400).json({ error: 'Для очистки журнала введите: ОЧИСТИТЬ ЖУРНАЛ' });
+    return;
+  }
+  const result = db.prepare('DELETE FROM admin_logs').run();
+  logAdmin('logs:clear', { deleted: result.changes });
+  res.json({ ok: true, deleted: result.changes });
 });
 
 app.get('/adminka', (_req, res) => {

@@ -691,6 +691,11 @@ button:hover {
   background: #27323a;
 }
 
+.logs-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .admin-card {
   display: grid;
   gap: 10px;
@@ -832,6 +837,10 @@ button:hover {
   .admin-subhead,
   .form-row {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .logs-actions {
     flex-direction: column;
   }
 }

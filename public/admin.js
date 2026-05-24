@@ -14,6 +14,7 @@ const refresh = document.querySelector('#refresh');
 const adminMagnets = document.querySelector('#adminMagnets');
 const filterRow = document.querySelector('#filterRow');
 const refreshLogs = document.querySelector('#refreshLogs');
+const clearLogs = document.querySelector('#clearLogs');
 const adminLogs = document.querySelector('#adminLogs');
 const deleteAllMagnets = document.querySelector('#deleteAllMagnets');
 const toast = document.querySelector('#toast');
@@ -183,6 +184,25 @@ settingsForm.addEventListener('submit', async (event) => {
 
 refresh.addEventListener('click', () => loadMagnets().catch(error => showToast(error.message)));
 refreshLogs.addEventListener('click', () => loadLogs().catch(error => showToast(error.message)));
+clearLogs.addEventListener('click', async () => {
+  if (!confirm('Очистить журнал действий? Это действие нельзя отменить.')) return;
+  const phrase = prompt('Для подтверждения введите: ОЧИСТИТЬ ЖУРНАЛ');
+  if (phrase !== 'ОЧИСТИТЬ ЖУРНАЛ') {
+    showToast('Очистка отменена');
+    return;
+  }
+  try {
+    const result = await request('/api/admin/logs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: phrase })
+    });
+    await loadLogs();
+    showToast(`Журнал очищен: ${result.deleted}`);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 deleteAllMagnets.addEventListener('click', async () => {
   if (!allMagnets.length) {
     showToast('Магнитов пока нет');
