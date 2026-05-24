@@ -157,6 +157,9 @@ button:hover {
   bottom: 72px;
   z-index: 9;
   transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   display: none;
 }
 
@@ -316,7 +319,7 @@ button:hover {
   overflow-wrap: anywhere;
   color: #1656b8;
   font-family: "Segoe Print", "Comic Sans MS", cursive;
-  font-size: 18px;
+  font-size: var(--caption-size, 18px);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0;
@@ -330,8 +333,8 @@ button:hover {
   bottom: -18px;
   z-index: 4;
   display: inline-grid;
-  min-width: 38px;
-  height: 34px;
+  min-width: var(--like-size, 38px);
+  height: max(30px, calc(var(--like-size, 38px) * 0.9));
   place-items: center;
   border: 2px solid #fff;
   border-radius: 999px;
@@ -711,7 +714,7 @@ button:hover {
   }
 
   .mobile-upload {
-    display: block;
+    display: flex;
   }
 
   .settings-grid,
@@ -729,6 +732,6 @@ button:hover {
 
 @media (pointer: coarse) {
   .mobile-upload {
-    display: block;
+    display: flex;
   }
 }

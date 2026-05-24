@@ -19,8 +19,11 @@
       </div>
 
       <div class="mobile-upload" id="mobileUpload">
-        <input id="mobileMagnetInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" capture="environment" hidden>
-        <button id="mobileUploadButton" type="button">Выбрать магнит</button>
+        <input id="mobileGalleryInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+        <input id="mobileCameraInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" capture="environment" hidden>
+        <button id="mobileGalleryButton" type="button">Выбрать фото</button>
+        <button id="mobileCameraButton" type="button">Сделать фото</button>
+        <button id="mobileCancelButton" type="button" hidden>Отменить</button>
       </div>
 
       <div id="magnets" class="magnets"></div>

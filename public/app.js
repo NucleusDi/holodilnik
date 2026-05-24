@@ -5,8 +5,11 @@ const toast = document.querySelector('#toast');
 const titleText = document.querySelector('#titleText');
 const titleImage = document.querySelector('#titleImage');
 const mobileUpload = document.querySelector('#mobileUpload');
-const mobileUploadButton = document.querySelector('#mobileUploadButton');
-const mobileMagnetInput = document.querySelector('#mobileMagnetInput');
+const mobileGalleryButton = document.querySelector('#mobileGalleryButton');
+const mobileCameraButton = document.querySelector('#mobileCameraButton');
+const mobileCancelButton = document.querySelector('#mobileCancelButton');
+const mobileGalleryInput = document.querySelector('#mobileGalleryInput');
+const mobileCameraInput = document.querySelector('#mobileCameraInput');
 const uploadDialog = document.querySelector('#uploadDialog');
 const uploadForm = document.querySelector('#uploadForm');
 const uploadPreview = document.querySelector('#uploadPreview');
@@ -23,6 +26,7 @@ let selectedFrameStyle = 'polaroid';
 let selectedFrameColor = 'white';
 let adminMode = false;
 let adminDrag = null;
+let fridgeScale = 1;
 
 function showToast(message) {
   toast.textContent = message;
@@ -35,7 +39,9 @@ function resetMobilePlacement() {
   pendingUpload = null;
   fridge.classList.remove('placing');
   mobileUpload.classList.remove('placing');
-  mobileUploadButton.textContent = 'Выбрать магнит';
+  mobileGalleryButton.hidden = false;
+  mobileCameraButton.hidden = false;
+  mobileCancelButton.hidden = true;
   dropHint.textContent = 'Перетащите картинку на холодильник';
 }
 
@@ -59,10 +65,12 @@ function renderMagnet(magnet) {
   const frameStyle = ['polaroid', 'circle'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
   const frameColor = magnet.frameColor || 'white';
   el.className = `magnet frame-${frameStyle} frame-color-${frameColor} ${magnet.status === 'pending' ? 'pending' : ''}`;
-  el.style.left = `${magnet.x}px`;
-  el.style.top = `${magnet.y}px`;
-  el.style.setProperty('--w', `${magnet.width}px`);
-  el.style.setProperty('--h', `${magnet.height}px`);
+  el.style.left = `${magnet.x * fridgeScale}px`;
+  el.style.top = `${magnet.y * fridgeScale}px`;
+  el.style.setProperty('--w', `${magnet.width * fridgeScale}px`);
+  el.style.setProperty('--h', `${magnet.height * fridgeScale}px`);
+  el.style.setProperty('--caption-size', `${Math.max(12, 18 * fridgeScale)}px`);
+  el.style.setProperty('--like-size', `${Math.max(30, 38 * fridgeScale)}px`);
   el.style.setProperty('--r', `${rotationFor(magnet.id)}deg`);
   el.dataset.id = magnet.id;
 
@@ -102,8 +110,8 @@ function renderMagnet(magnet) {
       id: magnet.id,
       element: el,
       magnet,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top
+      offsetX: (event.clientX - rect.left) / fridgeScale,
+      offsetY: (event.clientY - rect.top) / fridgeScale
     };
     el.setPointerCapture(event.pointerId);
     el.classList.add('moving');
@@ -116,7 +124,27 @@ function renderMagnet(magnet) {
 function growFridge() {
   const base = window.innerHeight - (window.innerWidth <= 720 ? 16 : 36);
   const bottom = magnets.reduce((max, magnet) => Math.max(max, magnet.y + magnet.height + (magnet.caption ? 260 : 220)), base);
-  fridge.style.minHeight = `${Math.max(bottom, base)}px`;
+  const naturalHeight = Math.max(bottom * fridgeScale, base);
+  fridge.style.minHeight = `${naturalHeight}px`;
+  document.documentElement.style.setProperty('--fridge-height', `${naturalHeight}px`);
+}
+
+function updateFridgeScale() {
+  const baseWidth = 1180;
+  const available = Math.max(320, window.innerWidth - (window.innerWidth <= 720 ? 16 : 64));
+  fridgeScale = window.innerWidth <= 900 ? Math.min(1, available / baseWidth) : 1;
+  document.documentElement.style.setProperty('--fridge-scale', String(fridgeScale));
+  magnetsLayer.replaceChildren();
+  magnets.forEach(renderMagnet);
+  growFridge();
+}
+
+function pointToFridge(clientX, clientY) {
+  const rect = fridge.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left) / fridgeScale,
+    y: (clientY - rect.top) / fridgeScale
+  };
 }
 
 async function loadAll() {
@@ -239,10 +267,10 @@ async function prepareUpload(file) {
 
 async function uploadAt(upload, clientX, clientY) {
   if (!upload) return;
-  const rect = fridge.getBoundingClientRect();
+  const point = pointToFridge(clientX, clientY);
   const size = upload.size;
-  const x = Math.max(16, clientX - rect.left - size.width / 2);
-  const y = Math.max(130, clientY - rect.top - size.height / 2);
+  const x = Math.max(16, point.x - size.width / 2);
+  const y = Math.max(130, point.y - size.height / 2);
 
   const form = new FormData();
   form.append('magnet', upload.file);
@@ -289,31 +317,39 @@ fridge.addEventListener('drop', async (event) => {
   }
 });
 
-mobileUploadButton.addEventListener('click', () => {
+function chooseMobileFile(input) {
   if (pendingUpload) {
     resetMobilePlacement();
     return;
   }
-  mobileMagnetInput.click();
-});
+  input.click();
+}
 
-mobileMagnetInput.addEventListener('change', async () => {
-  const file = mobileMagnetInput.files[0];
-  mobileMagnetInput.value = '';
+async function handleMobileFile(input) {
+  const file = input.files[0];
+  input.value = '';
   if (!file) return;
   try {
     pendingUpload = await prepareUpload(file);
     if (!pendingUpload) return;
     fridge.classList.add('placing');
     mobileUpload.classList.add('placing');
-    mobileUploadButton.textContent = 'Отменить';
+    mobileGalleryButton.hidden = true;
+    mobileCameraButton.hidden = true;
+    mobileCancelButton.hidden = false;
     dropHint.textContent = 'Тапните место для магнита';
     showToast('Теперь тапните по холодильнику');
   } catch (error) {
     showToast(error.message);
     resetMobilePlacement();
   }
-});
+}
+
+mobileGalleryButton.addEventListener('click', () => chooseMobileFile(mobileGalleryInput));
+mobileCameraButton.addEventListener('click', () => chooseMobileFile(mobileCameraInput));
+mobileCancelButton.addEventListener('click', resetMobilePlacement);
+mobileGalleryInput.addEventListener('change', () => handleMobileFile(mobileGalleryInput));
+mobileCameraInput.addEventListener('change', () => handleMobileFile(mobileCameraInput));
 
 fridge.addEventListener('click', async (event) => {
   if (!pendingUpload) return;
@@ -351,11 +387,11 @@ frameColorInput.addEventListener('click', (event) => {
 
 window.addEventListener('pointermove', (event) => {
   if (!adminDrag) return;
-  const rect = fridge.getBoundingClientRect();
-  const x = Math.max(8, event.clientX - rect.left - adminDrag.offsetX);
-  const y = Math.max(8, event.clientY - rect.top - adminDrag.offsetY);
-  adminDrag.element.style.left = `${x}px`;
-  adminDrag.element.style.top = `${y}px`;
+  const point = pointToFridge(event.clientX, event.clientY);
+  const x = Math.max(8, point.x - adminDrag.offsetX);
+  const y = Math.max(8, point.y - adminDrag.offsetY);
+  adminDrag.element.style.left = `${x * fridgeScale}px`;
+  adminDrag.element.style.top = `${y * fridgeScale}px`;
 });
 
 window.addEventListener('pointerup', async () => {
@@ -363,8 +399,8 @@ window.addEventListener('pointerup', async () => {
   const drag = adminDrag;
   adminDrag = null;
   drag.element.classList.remove('moving');
-  const x = Math.round(parseFloat(drag.element.style.left));
-  const y = Math.round(parseFloat(drag.element.style.top));
+  const x = Math.round(parseFloat(drag.element.style.left) / fridgeScale);
+  const y = Math.round(parseFloat(drag.element.style.top) / fridgeScale);
   try {
     await request(`/api/admin/magnets/${drag.id}`, {
       method: 'PATCH',
@@ -382,5 +418,6 @@ window.addEventListener('pointerup', async () => {
   }
 });
 
-window.addEventListener('resize', growFridge);
+window.addEventListener('resize', updateFridgeScale);
+updateFridgeScale();
 loadAll().catch(error => showToast(error.message));
