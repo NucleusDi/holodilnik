@@ -192,11 +192,18 @@ button:hover {
   box-shadow: 0 8px 18px rgba(17, 31, 39, 0.2);
 }
 
-.magnet::after {
+.magnet-media {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #f4f7f8;
+}
+
+.magnet-media::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 1;
   pointer-events: none;
   background: linear-gradient(115deg, transparent 34%, rgba(255,255,255,0.62) 47%, rgba(255,255,255,0.24) 52%, transparent 64%);
   border-radius: inherit;
@@ -205,7 +212,7 @@ button:hover {
   transition: opacity 0.18s ease, transform 0.62s ease;
 }
 
-.magnet:hover::after {
+.magnet:hover .magnet-media::after {
   opacity: 1;
   transform: translateX(110%) skewX(-16deg);
 }
@@ -254,15 +261,13 @@ button:hover {
   overflow: visible;
 }
 
-.magnet.frame-circle::after {
+.magnet.frame-circle .magnet-media {
   border-radius: 999px;
-  clip-path: circle(50% at 50% 50%);
 }
 
 .magnet.frame-circle img {
   height: var(--w);
   max-height: none;
-  border-radius: 999px;
   object-fit: cover;
 }
 
@@ -299,8 +304,6 @@ button:hover {
   height: auto;
   max-height: var(--h);
   object-fit: contain;
-  border-radius: 3px;
-  background: #f4f7f8;
 }
 
 .caption {
@@ -467,6 +470,38 @@ button:hover {
   border-radius: 999px;
   padding: 0;
   background: var(--frame-color, #fff);
+}
+
+.color-choice button[data-frame-color="white"] {
+  --frame-color: #fff;
+}
+
+.color-choice button[data-frame-color="red"] {
+  --frame-color: #f04f57;
+}
+
+.color-choice button[data-frame-color="orange"] {
+  --frame-color: #ff9b32;
+}
+
+.color-choice button[data-frame-color="yellow"] {
+  --frame-color: #ffe35a;
+}
+
+.color-choice button[data-frame-color="green"] {
+  --frame-color: #54c46f;
+}
+
+.color-choice button[data-frame-color="blue"] {
+  --frame-color: #4fc3f7;
+}
+
+.color-choice button[data-frame-color="indigo"] {
+  --frame-color: #3f5bd8;
+}
+
+.color-choice button[data-frame-color="violet"] {
+  --frame-color: #9b5de5;
 }
 
 .color-choice button.active {

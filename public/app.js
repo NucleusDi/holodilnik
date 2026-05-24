@@ -66,10 +66,14 @@ function renderMagnet(magnet) {
   el.style.setProperty('--r', `${rotationFor(magnet.id)}deg`);
   el.dataset.id = magnet.id;
 
+  const media = document.createElement('div');
+  media.className = 'magnet-media';
+
   const img = document.createElement('img');
   img.src = magnet.src;
   img.alt = magnet.originalName || 'Магнит';
   img.loading = 'lazy';
+  media.append(img);
 
   const caption = document.createElement('p');
   caption.className = 'caption';
@@ -105,7 +109,7 @@ function renderMagnet(magnet) {
     el.classList.add('moving');
   });
 
-  el.append(img, caption, like);
+  el.append(media, caption, like);
   magnetsLayer.append(el);
 }
 
