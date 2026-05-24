@@ -384,6 +384,27 @@ app.delete('/api/admin/magnets/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+app.delete('/api/admin/magnets', (req, res) => {
+  if (req.body?.confirm !== 'УДАЛИТЬ ВСЕ') {
+    res.status(400).json({ error: 'Для удаления всех магнитов введите: УДАЛИТЬ ВСЕ' });
+    return;
+  }
+
+  const rows = db.prepare('SELECT id, file_name AS fileName FROM magnets').all();
+  const removeAll = db.transaction(() => {
+    db.prepare('DELETE FROM liked_magnets').run();
+    db.prepare('DELETE FROM magnets').run();
+  });
+  removeAll();
+
+  for (const row of rows) {
+    fs.unlink(path.join(MEMS_DIR, row.fileName), () => {});
+  }
+
+  logAdmin('magnet:delete-all', { count: rows.length });
+  res.json({ ok: true, count: rows.length });
+});
+
 app.get('/api/admin/logs', (_req, res) => {
   res.json(db.prepare('SELECT id, action, details, created_at AS createdAt FROM admin_logs ORDER BY id DESC LIMIT 80').all());
 });

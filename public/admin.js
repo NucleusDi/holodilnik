@@ -15,6 +15,7 @@ const adminMagnets = document.querySelector('#adminMagnets');
 const filterRow = document.querySelector('#filterRow');
 const refreshLogs = document.querySelector('#refreshLogs');
 const adminLogs = document.querySelector('#adminLogs');
+const deleteAllMagnets = document.querySelector('#deleteAllMagnets');
 const toast = document.querySelector('#toast');
 
 let allMagnets = [];
@@ -182,6 +183,31 @@ settingsForm.addEventListener('submit', async (event) => {
 
 refresh.addEventListener('click', () => loadMagnets().catch(error => showToast(error.message)));
 refreshLogs.addEventListener('click', () => loadLogs().catch(error => showToast(error.message)));
+deleteAllMagnets.addEventListener('click', async () => {
+  if (!allMagnets.length) {
+    showToast('Магнитов пока нет');
+    return;
+  }
+  if (!confirm(`Удалить все магниты? Сейчас будет удалено: ${allMagnets.length}. Это действие нельзя отменить.`)) {
+    return;
+  }
+  const phrase = prompt('Для подтверждения введите: УДАЛИТЬ ВСЕ');
+  if (phrase !== 'УДАЛИТЬ ВСЕ') {
+    showToast('Удаление отменено');
+    return;
+  }
+  try {
+    const result = await request('/api/admin/magnets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: phrase })
+    });
+    await Promise.all([loadMagnets(), loadLogs()]);
+    showToast(`Удалено магнитов: ${result.count}`);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 filterRow.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-filter]');
   if (!button) return;
