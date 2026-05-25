@@ -39,6 +39,7 @@ let adminDrag = null;
 let fridgeScale = 1;
 let suppressImageOpen = false;
 let activeMagnet = null;
+let uploadsClosed = false;
 
 function showToast(message) {
   toast.textContent = message;
@@ -216,6 +217,9 @@ async function loadAll() {
   ]);
 
   document.title = cfg.titleText || 'Наш холодильник';
+  uploadsClosed = Boolean(cfg.uploadsClosed);
+  mobileUpload.hidden = uploadsClosed;
+  dropHint.hidden = uploadsClosed;
   titleText.textContent = cfg.titleText || 'Наш холодильник';
   titleText.style.color = cfg.titleColor || '#2a363b';
   titleText.className = `title-font-${cfg.titleFont || 'classic'}`;
@@ -435,6 +439,7 @@ async function uploadAt(upload, clientX, clientY) {
 }
 
 fridge.addEventListener('dragover', (event) => {
+  if (uploadsClosed) return;
   event.preventDefault();
   dropHint.classList.add('active');
   dropHint.textContent = 'Отпустите картинку здесь';
@@ -446,6 +451,7 @@ fridge.addEventListener('dragleave', () => {
 });
 
 fridge.addEventListener('drop', async (event) => {
+  if (uploadsClosed) return;
   event.preventDefault();
   dropHint.classList.remove('active');
   dropHint.textContent = 'Перетащите картинку на холодильник';
@@ -458,6 +464,10 @@ fridge.addEventListener('drop', async (event) => {
 });
 
 function chooseMobileFile(input) {
+  if (uploadsClosed) {
+    showToast('Холодильник закрыт для новых магнитов');
+    return;
+  }
   if (pendingUpload) {
     resetMobilePlacement();
     return;
@@ -489,6 +499,10 @@ async function handleMobileFile(input) {
 mobileGalleryButton.addEventListener('click', () => chooseMobileFile(mobileGalleryInput));
 mobileCameraButton.addEventListener('click', () => chooseMobileFile(mobileCameraInput));
 mobilePasteButton.addEventListener('click', async () => {
+  if (uploadsClosed) {
+    showToast('Холодильник закрыт для новых магнитов');
+    return;
+  }
   if (pendingUpload) {
     resetMobilePlacement();
     return;

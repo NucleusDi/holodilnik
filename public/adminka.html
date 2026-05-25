@@ -69,11 +69,39 @@
             Модерация новых магнитов
           </label>
           <label class="checkbox-row">
+            <input id="uploadsClosedInput" name="uploadsClosed" type="checkbox">
+            Холодильник закрыт для новых магнитов
+          </label>
+          <label class="checkbox-row">
             <input id="clearTitleImage" name="clearTitleImage" type="checkbox">
             Убрать картинку заголовка
           </label>
           <button type="submit">Сохранить</button>
         </form>
+
+        <div class="storage-panel" id="storagePanel">
+          <div>
+            <h3>Папка mems</h3>
+            <p id="storageText">Проверяем...</p>
+          </div>
+          <div class="storage-actions">
+            <button id="refreshStorage" type="button">Обновить размер</button>
+            <button id="closeFridge" class="secondary" type="button">Закрыть холодильник</button>
+            <button id="openFridge" class="secondary" type="button">Открыть холодильник</button>
+          </div>
+        </div>
+
+        <div class="backup-panel">
+          <div>
+            <h3>Бэкап холодильника</h3>
+            <p>Архивы сохраняются на сервере в папке backup_holodos.</p>
+          </div>
+          <div class="backup-actions">
+            <button id="createBackup" type="button">Создать бэкап</button>
+            <select id="backupSelect"></select>
+            <button id="restoreBackup" class="danger" type="button">Восстановить</button>
+          </div>
+        </div>
       </section>
 
       <section class="admin-section">

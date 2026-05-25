@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 require('dotenv').config();
 
@@ -16,6 +17,7 @@ const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const MEMS_DIR = path.join(ROOT, 'mems');
 const DATA_DIR = path.join(ROOT, 'data');
+const BACKUP_DIR = path.join(ROOT, 'backup_holodos');
 const DB_PATH = path.join(DATA_DIR, 'holodilnik.sqlite');
 const MAX_MAGNET_SIZE = 8 * 1024 * 1024;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-pass';
@@ -26,6 +28,7 @@ const uploadHits = new Map();
 
 fs.mkdirSync(MEMS_DIR, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -117,6 +120,7 @@ insertSetting.run('title_image', '');
 insertSetting.run('moderation', 'false');
 insertSetting.run('title_color', '#2a363b');
 insertSetting.run('title_font', 'classic');
+insertSetting.run('uploads_closed', 'false');
 
 const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
@@ -126,6 +130,7 @@ function settings() {
     titleText: getSetting.get('title_text')?.value || 'Наш холодильник',
     titleImage: getSetting.get('title_image')?.value || '',
     moderation: getSetting.get('moderation')?.value === 'true',
+    uploadsClosed: getSetting.get('uploads_closed')?.value === 'true',
     titleColor: getSetting.get('title_color')?.value || '#2a363b',
     titleFont: getSetting.get('title_font')?.value || 'classic'
   };
@@ -214,6 +219,113 @@ function rejectUpload(file, res, message) {
   res.status(400).json({ error: message });
 }
 
+function dirSize(dir) {
+  if (!fs.existsSync(dir)) return 0;
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) total += dirSize(full);
+    if (entry.isFile()) total += fs.statSync(full).size;
+  }
+  return total;
+}
+
+function backupName() {
+  return `holodilnik-${new Date().toISOString().replace(/[:.]/g, '-')}.holodos.json.gz`;
+}
+
+function safeBackupPath(name) {
+  if (!/^[a-zA-Z0-9._-]+\.holodos\.json\.gz$/.test(String(name || ''))) return null;
+  const full = path.resolve(BACKUP_DIR, name);
+  return full.startsWith(path.resolve(BACKUP_DIR) + path.sep) ? full : null;
+}
+
+function listMemsFiles() {
+  if (!fs.existsSync(MEMS_DIR)) return [];
+  return fs.readdirSync(MEMS_DIR, { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .map(entry => entry.name);
+}
+
+function exportManifest() {
+  return {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    tables: {
+      settings: db.prepare('SELECT key, value FROM settings').all(),
+      magnets: db.prepare('SELECT * FROM magnets ORDER BY created_at ASC').all(),
+      liked_magnets: db.prepare('SELECT * FROM liked_magnets').all(),
+      comments: db.prepare('SELECT * FROM comments ORDER BY id ASC').all(),
+      admin_logs: db.prepare('SELECT * FROM admin_logs ORDER BY id ASC').all()
+    },
+    files: listMemsFiles().map(name => ({
+      name,
+      data: fs.readFileSync(path.join(MEMS_DIR, name)).toString('base64')
+    }))
+  };
+}
+
+function createBackupArchive() {
+  const name = backupName();
+  const target = path.join(BACKUP_DIR, name);
+  fs.writeFileSync(target, zlib.gzipSync(Buffer.from(JSON.stringify(exportManifest()))));
+  return { name, path: target, size: fs.statSync(target).size };
+}
+
+function listBackups() {
+  if (!fs.existsSync(BACKUP_DIR)) return [];
+  return fs.readdirSync(BACKUP_DIR)
+    .filter(name => safeBackupPath(name))
+    .map(name => {
+      const stat = fs.statSync(path.join(BACKUP_DIR, name));
+      return { name, size: stat.size, createdAt: stat.mtime.toISOString() };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function restoreBackupArchive(name) {
+  const source = safeBackupPath(name);
+  if (!source || !fs.existsSync(source)) throw new Error('Бэкап не найден');
+  const manifest = JSON.parse(zlib.gunzipSync(fs.readFileSync(source)).toString('utf8'));
+  const tables = manifest.tables || {};
+
+  const restore = db.transaction(() => {
+    db.prepare('DELETE FROM liked_magnets').run();
+    db.prepare('DELETE FROM comments').run();
+    db.prepare('DELETE FROM magnets').run();
+    db.prepare('DELETE FROM settings').run();
+    db.prepare('DELETE FROM admin_logs').run();
+
+    for (const row of tables.settings || []) {
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(row.key, row.value);
+    }
+    for (const row of tables.magnets || []) {
+      db.prepare(`
+        INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, likes, status, created_at)
+        VALUES (@id, @file_name, @original_name, @caption, @frame_style, @frame_color, @x, @y, @width, @height, @likes, @status, @created_at)
+      `).run(row);
+    }
+    for (const row of tables.liked_magnets || []) {
+      db.prepare('INSERT INTO liked_magnets (magnet_id, voter_id, created_at) VALUES (@magnet_id, @voter_id, @created_at)').run(row);
+    }
+    for (const row of tables.comments || []) {
+      db.prepare('INSERT INTO comments (id, magnet_id, body, ip, created_at) VALUES (@id, @magnet_id, @body, @ip, @created_at)').run(row);
+    }
+    for (const row of tables.admin_logs || []) {
+      db.prepare('INSERT INTO admin_logs (id, action, admin_id, admin_name, ip, details, created_at) VALUES (@id, @action, @admin_id, @admin_name, @ip, @details, @created_at)').run(row);
+    }
+  });
+  restore();
+
+  fs.rmSync(MEMS_DIR, { recursive: true, force: true });
+  fs.mkdirSync(MEMS_DIR, { recursive: true });
+  for (const file of manifest.files || []) {
+    const fileName = path.basename(String(file.name || ''));
+    if (!fileName || fileName !== file.name) continue;
+    fs.writeFileSync(path.join(MEMS_DIR, fileName), Buffer.from(String(file.data || ''), 'base64'));
+  }
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, MEMS_DIR),
   filename: (_req, file, cb) => {
@@ -297,6 +409,10 @@ app.get('/api/magnets', (req, res) => {
 app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: 'Добавьте картинку магнита' });
+    return;
+  }
+  if (settings().uploadsClosed && !isAdmin(req)) {
+    rejectUpload(req.file, res, 'Холодильник закрыт для новых магнитов');
     return;
   }
   if (!isSupportedImage(req.file)) {
@@ -482,6 +598,9 @@ app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
   if (typeof req.body.moderation === 'string') {
     setSetting.run('moderation', req.body.moderation === 'true' ? 'true' : 'false');
   }
+  if (typeof req.body.uploadsClosed === 'string') {
+    setSetting.run('uploads_closed', req.body.uploadsClosed === 'true' ? 'true' : 'false');
+  }
   if (req.file) {
     setSetting.run('title_image', `/mems/${req.file.filename}`);
   }
@@ -497,6 +616,58 @@ app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
   const cfg = settings();
   logAdmin('settings:update', cfg, req);
   res.json(cfg);
+});
+
+app.get('/api/admin/storage', (_req, res) => {
+  const bytes = dirSize(MEMS_DIR);
+  res.json({
+    memsBytes: bytes,
+    memsMb: Math.round(bytes / 1024 / 1024 * 10) / 10,
+    limitBytes: 1024 * 1024 * 1024,
+    overLimit: bytes > 1024 * 1024 * 1024,
+    uploadsClosed: settings().uploadsClosed
+  });
+});
+
+app.post('/api/admin/close-fridge', (req, res) => {
+  setSetting.run('uploads_closed', 'true');
+  logAdmin('fridge:close', {}, req);
+  res.json(settings());
+});
+
+app.post('/api/admin/open-fridge', (req, res) => {
+  setSetting.run('uploads_closed', 'false');
+  logAdmin('fridge:open', {}, req);
+  res.json(settings());
+});
+
+app.get('/api/admin/backups', (_req, res) => {
+  res.json(listBackups());
+});
+
+app.post('/api/admin/backups', (req, res) => {
+  try {
+    const backup = createBackupArchive();
+    logAdmin('backup:create', backup, req);
+    res.status(201).json(backup);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Не удалось создать бэкап' });
+  }
+});
+
+app.post('/api/admin/backups/restore', (req, res) => {
+  const name = String(req.body.name || '');
+  if (req.body.confirm !== 'ВОССТАНОВИТЬ') {
+    res.status(400).json({ error: 'Для восстановления введите: ВОССТАНОВИТЬ' });
+    return;
+  }
+  try {
+    restoreBackupArchive(name);
+    logAdmin('backup:restore', { name }, req);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Не удалось восстановить бэкап' });
+  }
 });
 
 app.patch('/api/admin/magnets/:id', (req, res) => {

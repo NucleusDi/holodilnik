@@ -14,7 +14,16 @@ const titleImageInput = document.querySelector('#titleImageInput');
 const titleColorInput = document.querySelector('#titleColorInput');
 const titleFontInput = document.querySelector('#titleFontInput');
 const moderationInput = document.querySelector('#moderationInput');
+const uploadsClosedInput = document.querySelector('#uploadsClosedInput');
 const clearTitleImage = document.querySelector('#clearTitleImage');
+const storagePanel = document.querySelector('#storagePanel');
+const storageText = document.querySelector('#storageText');
+const refreshStorage = document.querySelector('#refreshStorage');
+const closeFridge = document.querySelector('#closeFridge');
+const openFridge = document.querySelector('#openFridge');
+const createBackup = document.querySelector('#createBackup');
+const backupSelect = document.querySelector('#backupSelect');
+const restoreBackup = document.querySelector('#restoreBackup');
 const refresh = document.querySelector('#refresh');
 const adminMagnets = document.querySelector('#adminMagnets');
 const filterRow = document.querySelector('#filterRow');
@@ -29,6 +38,7 @@ let allMagnets = [];
 let activeFilter = 'all';
 let currentAdmin = null;
 let clearLogsArmed = false;
+let storageWarned = false;
 
 function showToast(message) {
   toast.textContent = message;
@@ -63,6 +73,58 @@ async function loadSettings() {
   titleColorInput.value = cfg.titleColor || '#2a363b';
   titleFontInput.value = cfg.titleFont || 'classic';
   moderationInput.checked = Boolean(cfg.moderation);
+  uploadsClosedInput.checked = Boolean(cfg.uploadsClosed);
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} ГБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+async function loadStorage() {
+  const info = await request('/api/admin/storage');
+  storageText.textContent = `${formatBytes(info.memsBytes)} из 1.00 ГБ${info.uploadsClosed ? ' · холодильник закрыт' : ''}`;
+  storagePanel.classList.toggle('warning', info.overLimit);
+  uploadsClosedInput.checked = Boolean(info.uploadsClosed);
+  if (info.overLimit && !storageWarned) {
+    storageWarned = true;
+    const clear = confirm('Папка mems больше 1 ГБ. Провести полную очистку холодильника от магнитов?');
+    if (clear) {
+      const phrase = prompt('Для подтверждения очистки введите: УДАЛИТЬ ВСЕ');
+      if (phrase === 'УДАЛИТЬ ВСЕ') {
+        await request('/api/admin/magnets', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: phrase })
+        });
+        await Promise.all([loadMagnets(), loadLogs(), loadStorage()]);
+        showToast('Холодильник очищен');
+        return;
+      }
+    }
+    const close = confirm('Закрыть холодильник для новых магнитов и начать новый холодильник отдельно?');
+    if (close) {
+      await request('/api/admin/close-fridge', { method: 'POST' });
+      await loadSettings();
+      await loadStorage();
+    }
+  }
+}
+
+async function loadBackups() {
+  const rows = await request('/api/admin/backups');
+  backupSelect.replaceChildren(...rows.map(row => {
+    const option = document.createElement('option');
+    option.value = row.name;
+    option.textContent = `${row.name} · ${formatBytes(row.size)}`;
+    return option;
+  }));
+  if (!rows.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Бэкапов пока нет';
+    backupSelect.replaceChildren(option);
+  }
 }
 
 function card(magnet) {
@@ -153,7 +215,7 @@ async function boot() {
   setAuthed(me.admin);
   if (me.admin) {
     setAdminProfile(me);
-    await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
+    await Promise.all([loadSettings(), loadMagnets(), loadLogs(), loadStorage(), loadBackups()]);
   }
 }
 
@@ -168,7 +230,7 @@ loginForm.addEventListener('submit', async (event) => {
     password.value = '';
     setAuthed(true);
     setAdminProfile(result.admin);
-    await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
+    await Promise.all([loadSettings(), loadMagnets(), loadLogs(), loadStorage(), loadBackups()]);
   } catch (error) {
     showToast(error.message);
   }
@@ -208,6 +270,7 @@ settingsForm.addEventListener('submit', async (event) => {
   form.append('titleColor', titleColorInput.value);
   form.append('titleFont', titleFontInput.value);
   form.append('moderation', String(moderationInput.checked));
+  form.append('uploadsClosed', String(uploadsClosedInput.checked));
   form.append('clearTitleImage', String(clearTitleImage.checked));
   if (titleImageInput.files[0]) {
     form.append('titleImage', titleImageInput.files[0]);
@@ -216,6 +279,7 @@ settingsForm.addEventListener('submit', async (event) => {
     await request('/api/admin/settings', { method: 'PATCH', body: form });
     titleImageInput.value = '';
     clearTitleImage.checked = false;
+    await loadStorage();
     showToast('Настройки сохранены');
   } catch (error) {
     showToast(error.message);
@@ -224,6 +288,54 @@ settingsForm.addEventListener('submit', async (event) => {
 
 refresh.addEventListener('click', () => loadMagnets().catch(error => showToast(error.message)));
 refreshLogs.addEventListener('click', () => loadLogs().catch(error => showToast(error.message)));
+refreshStorage.addEventListener('click', () => loadStorage().catch(error => showToast(error.message)));
+closeFridge.addEventListener('click', async () => {
+  await request('/api/admin/close-fridge', { method: 'POST' });
+  await Promise.all([loadSettings(), loadStorage(), loadLogs()]);
+  showToast('Холодильник закрыт');
+});
+openFridge.addEventListener('click', async () => {
+  await request('/api/admin/open-fridge', { method: 'POST' });
+  await Promise.all([loadSettings(), loadStorage(), loadLogs()]);
+  showToast('Холодильник открыт');
+});
+createBackup.addEventListener('click', async () => {
+  try {
+    createBackup.disabled = true;
+    const backup = await request('/api/admin/backups', { method: 'POST' });
+    await Promise.all([loadBackups(), loadLogs(), loadStorage()]);
+    backupSelect.value = backup.name;
+    showToast(`Бэкап создан: ${backup.name}`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    createBackup.disabled = false;
+  }
+});
+restoreBackup.addEventListener('click', async () => {
+  const name = backupSelect.value;
+  if (!name) {
+    showToast('Выберите бэкап');
+    return;
+  }
+  if (!confirm(`Восстановить холодильник из ${name}? Текущие магниты и комментарии будут заменены.`)) return;
+  const phrase = prompt('Для подтверждения введите: ВОССТАНОВИТЬ');
+  if (phrase !== 'ВОССТАНОВИТЬ') {
+    showToast('Восстановление отменено');
+    return;
+  }
+  try {
+    await request('/api/admin/backups/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, confirm: phrase })
+    });
+    await Promise.all([loadSettings(), loadMagnets(), loadLogs(), loadStorage(), loadBackups()]);
+    showToast('Бэкап восстановлен');
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 clearLogs.addEventListener('click', () => {
   clearLogsArmed = true;
   confirmClearLogs.hidden = false;
