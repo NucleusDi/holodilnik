@@ -675,6 +675,20 @@ button:hover {
   box-shadow: 0 10px 30px rgba(30, 50, 60, 0.08);
 }
 
+.admin-section {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 2px dashed rgba(16, 24, 32, 0.42);
+}
+
+.admin-section:first-of-type {
+  border-top-style: solid;
+}
+
+.admin-section > h2 {
+  margin: 0 0 16px;
+}
+
 .admin-top,
 .admin-subhead,
 .form-row {

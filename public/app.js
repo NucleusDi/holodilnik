@@ -274,6 +274,70 @@ async function compressImage(file) {
   return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
 }
 
+async function cleanMiniImage(file) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = url;
+  });
+  URL.revokeObjectURL(url);
+
+  const maxSide = 1200;
+  const scale = Math.min(maxSide / img.naturalWidth, maxSide / img.naturalHeight, 1);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  const width = canvas.width;
+  const height = canvas.height;
+  const total = width * height;
+  const visited = new Uint8Array(total);
+  const queue = [];
+
+  const isBlackish = (index) => {
+    const offset = index * 4;
+    return data[offset + 3] > 0 && data[offset] < 36 && data[offset + 1] < 36 && data[offset + 2] < 36;
+  };
+  const push = (index) => {
+    if (visited[index] || !isBlackish(index)) return;
+    visited[index] = 1;
+    queue.push(index);
+  };
+
+  for (let x = 0; x < width; x++) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
+
+  for (let head = 0; head < queue.length; head++) {
+    const index = queue[head];
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (x > 0) push(index - 1);
+    if (x < width - 1) push(index + 1);
+    if (y > 0) push(index - width);
+    if (y < height - 1) push(index + width);
+  }
+
+  for (const index of queue) {
+    data[index * 4 + 3] = 0;
+  }
+  ctx.putImageData(image, 0, 0);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' });
+}
+
 function showUploadDialog(file) {
   uploadPreview.src = URL.createObjectURL(file);
   captionInput.value = '';
@@ -431,10 +495,10 @@ mobilePasteButton.addEventListener('click', async () => {
   }
   try {
     const file = await readClipboardImage();
-    const compressed = await compressImage(file);
-    const size = await imageSize(compressed);
+    const cleaned = await cleanMiniImage(file);
+    const size = await imageSize(cleaned);
     pendingUpload = {
-      file: compressed,
+      file: cleaned,
       size,
       caption: '',
       frameStyle: 'mini',

@@ -20,6 +20,7 @@ const adminMagnets = document.querySelector('#adminMagnets');
 const filterRow = document.querySelector('#filterRow');
 const refreshLogs = document.querySelector('#refreshLogs');
 const clearLogs = document.querySelector('#clearLogs');
+const confirmClearLogs = document.querySelector('#confirmClearLogs');
 const adminLogs = document.querySelector('#adminLogs');
 const deleteAllMagnets = document.querySelector('#deleteAllMagnets');
 const toast = document.querySelector('#toast');
@@ -27,6 +28,7 @@ const toast = document.querySelector('#toast');
 let allMagnets = [];
 let activeFilter = 'all';
 let currentAdmin = null;
+let clearLogsArmed = false;
 
 function showToast(message) {
   toast.textContent = message;
@@ -222,19 +224,25 @@ settingsForm.addEventListener('submit', async (event) => {
 
 refresh.addEventListener('click', () => loadMagnets().catch(error => showToast(error.message)));
 refreshLogs.addEventListener('click', () => loadLogs().catch(error => showToast(error.message)));
-clearLogs.addEventListener('click', async () => {
-  if (!confirm('Очистить журнал действий? Это действие нельзя отменить.')) return;
-  const phrase = prompt('Для подтверждения введите: ОЧИСТИТЬ ЖУРНАЛ');
-  if (phrase !== 'ОЧИСТИТЬ ЖУРНАЛ') {
-    showToast('Очистка отменена');
-    return;
-  }
+clearLogs.addEventListener('click', () => {
+  clearLogsArmed = true;
+  confirmClearLogs.hidden = false;
+  showToast('Для очистки журнала нажмите "Точно очистить"');
+  window.setTimeout(() => {
+    clearLogsArmed = false;
+    confirmClearLogs.hidden = true;
+  }, 8000);
+});
+confirmClearLogs.addEventListener('click', async () => {
+  if (!clearLogsArmed) return;
   try {
     const result = await request('/api/admin/logs', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirm: phrase })
+      body: JSON.stringify({ confirm: 'ОЧИСТИТЬ ЖУРНАЛ' })
     });
+    clearLogsArmed = false;
+    confirmClearLogs.hidden = true;
     await loadLogs();
     showToast(`Журнал очищен: ${result.deleted}`);
   } catch (error) {
