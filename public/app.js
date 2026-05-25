@@ -23,6 +23,11 @@ const imageDialog = document.querySelector('#imageDialog');
 const imageDialogImg = document.querySelector('#imageDialogImg');
 const imageDialogCaption = document.querySelector('#imageDialogCaption');
 const closeImageDialog = document.querySelector('#closeImageDialog');
+const commentsToggle = document.querySelector('#commentsToggle');
+const commentsPanel = document.querySelector('#commentsPanel');
+const commentsList = document.querySelector('#commentsList');
+const commentForm = document.querySelector('#commentForm');
+const commentInput = document.querySelector('#commentInput');
 
 let magnets = [];
 let pendingUpload = null;
@@ -33,6 +38,7 @@ let adminMode = false;
 let adminDrag = null;
 let fridgeScale = 1;
 let suppressImageOpen = false;
+let activeMagnet = null;
 
 function showToast(message) {
   toast.textContent = message;
@@ -141,11 +147,40 @@ function renderMagnet(magnet) {
 }
 
 function openImageDialog(magnet) {
+  activeMagnet = magnet;
   imageDialogImg.src = magnet.src;
   imageDialogImg.alt = magnet.caption || magnet.originalName || 'Магнит';
   imageDialogCaption.textContent = magnet.caption || '';
   imageDialogCaption.hidden = !magnet.caption;
+  commentsPanel.hidden = true;
+  commentsList.replaceChildren();
+  commentInput.value = '';
+  commentsToggle.textContent = magnet.commentCount || 0;
   imageDialog.showModal();
+}
+
+function renderComments(rows) {
+  commentsList.replaceChildren(...rows.map(comment => {
+    const el = document.createElement('article');
+    el.className = 'comment-row';
+    const body = document.createElement('p');
+    body.textContent = comment.body;
+    const time = document.createElement('time');
+    time.textContent = comment.createdAt;
+    el.append(body, time);
+    return el;
+  }));
+  if (!rows.length) {
+    commentsList.textContent = 'Комментариев пока нет.';
+  }
+}
+
+async function loadComments() {
+  if (!activeMagnet) return;
+  const rows = await request(`/api/magnets/${activeMagnet.id}/comments`);
+  renderComments(rows);
+  commentsToggle.textContent = rows.length;
+  activeMagnet.commentCount = rows.length;
 }
 
 function growFridge() {
@@ -447,6 +482,37 @@ closeUploadDialog.addEventListener('click', () => uploadDialogResolve?.(null));
 closeImageDialog.addEventListener('click', () => imageDialog.close());
 imageDialog.addEventListener('click', (event) => {
   if (event.target === imageDialog) imageDialog.close();
+});
+commentsToggle.addEventListener('click', async () => {
+  commentsPanel.hidden = !commentsPanel.hidden;
+  if (!commentsPanel.hidden) {
+    try {
+      await loadComments();
+      commentInput.focus();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+});
+commentForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!activeMagnet) return;
+  try {
+    const comment = await request(`/api/magnets/${activeMagnet.id}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: commentInput.value })
+    });
+    commentInput.value = '';
+    if (commentsList.textContent === 'Комментариев пока нет.') commentsList.replaceChildren();
+    const current = await request(`/api/magnets/${activeMagnet.id}/comments`);
+    renderComments(current);
+    commentsToggle.textContent = current.length;
+    activeMagnet.commentCount = current.length;
+    showToast('Комментарий добавлен');
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 frameStyleInput.addEventListener('click', (event) => {
   const button = event.target.closest('[data-frame-style]');

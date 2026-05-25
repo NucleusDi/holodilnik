@@ -67,6 +67,14 @@
     <button id="closeImageDialog" class="icon-button image-close" type="button" aria-label="Закрыть">×</button>
     <img id="imageDialogImg" alt="">
     <p id="imageDialogCaption"></p>
+    <button id="commentsToggle" class="comment-toggle" type="button">0</button>
+    <section id="commentsPanel" class="comments-panel" hidden>
+      <div id="commentsList" class="comments-list"></div>
+      <form id="commentForm" class="comment-form">
+        <input id="commentInput" maxlength="500" placeholder="Комментарий" required>
+        <button type="submit">Добавить</button>
+      </form>
+    </section>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

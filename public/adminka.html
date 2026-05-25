@@ -19,8 +19,27 @@
     <section id="adminPanel" class="admin-panel" hidden>
       <div class="admin-top">
         <h1>Управление холодильником</h1>
-        <button id="logout" type="button">Выйти</button>
+        <div class="admin-identity">
+          <span id="adminDisplayName">admin</span>
+          <button id="logout" type="button">Выйти</button>
+        </div>
       </div>
+
+      <form id="profileForm" class="profile-form">
+        <label>
+          Отображаемое имя
+          <input id="displayNameInput" maxlength="40">
+        </label>
+        <label>
+          Текущий пароль
+          <input id="currentPasswordInput" type="password" autocomplete="current-password">
+        </label>
+        <label>
+          Новый пароль
+          <input id="newPasswordInput" type="password" autocomplete="new-password" placeholder="Оставьте пустым, если не меняете">
+        </label>
+        <button type="submit">Сохранить профиль</button>
+      </form>
 
       <form id="settingsForm" class="settings-grid">
         <label>

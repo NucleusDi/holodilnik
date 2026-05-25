@@ -3,6 +3,11 @@ const adminPanel = document.querySelector('#adminPanel');
 const loginForm = document.querySelector('#loginForm');
 const password = document.querySelector('#password');
 const logout = document.querySelector('#logout');
+const adminDisplayName = document.querySelector('#adminDisplayName');
+const profileForm = document.querySelector('#profileForm');
+const displayNameInput = document.querySelector('#displayNameInput');
+const currentPasswordInput = document.querySelector('#currentPasswordInput');
+const newPasswordInput = document.querySelector('#newPasswordInput');
 const settingsForm = document.querySelector('#settingsForm');
 const titleTextInput = document.querySelector('#titleTextInput');
 const titleImageInput = document.querySelector('#titleImageInput');
@@ -21,6 +26,7 @@ const toast = document.querySelector('#toast');
 
 let allMagnets = [];
 let activeFilter = 'all';
+let currentAdmin = null;
 
 function showToast(message) {
   toast.textContent = message;
@@ -41,6 +47,12 @@ async function request(url, options) {
 function setAuthed(admin) {
   loginPanel.hidden = admin;
   adminPanel.hidden = !admin;
+}
+
+function setAdminProfile(admin) {
+  currentAdmin = admin;
+  adminDisplayName.textContent = admin?.displayName || '';
+  displayNameInput.value = admin?.displayName || '';
 }
 
 async function loadSettings() {
@@ -125,8 +137,10 @@ async function loadLogs() {
   adminLogs.replaceChildren(...rows.map(row => {
     const el = document.createElement('div');
     el.className = 'log-row';
+    const actor = row.adminName ? ` · ${row.adminName}` : '';
+    const ip = row.ip ? ` · ${row.ip}` : '';
     const details = row.details && row.details !== '{}' ? ` · ${row.details}` : '';
-    el.textContent = `${row.createdAt} · ${row.action}${details}`;
+    el.textContent = `${row.createdAt} · ${row.action}${actor}${ip}${details}`;
     return el;
   }));
   if (!rows.length) adminLogs.textContent = 'Журнал пока пуст.';
@@ -136,6 +150,7 @@ async function boot() {
   const me = await request('/api/admin/me');
   setAuthed(me.admin);
   if (me.admin) {
+    setAdminProfile(me);
     await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
   }
 }
@@ -143,14 +158,37 @@ async function boot() {
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   try {
-    await request('/api/admin/login', {
+    const result = await request('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: password.value })
     });
     password.value = '';
     setAuthed(true);
+    setAdminProfile(result.admin);
     await Promise.all([loadSettings(), loadMagnets(), loadLogs()]);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+profileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    const result = await request('/api/admin/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName: displayNameInput.value,
+        currentPassword: currentPasswordInput.value,
+        newPassword: newPasswordInput.value
+      })
+    });
+    currentPasswordInput.value = '';
+    newPasswordInput.value = '';
+    setAdminProfile(result.admin);
+    await loadLogs();
+    showToast('Профиль сохранен');
   } catch (error) {
     showToast(error.message);
   }

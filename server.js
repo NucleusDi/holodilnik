@@ -19,6 +19,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'holodilnik.sqlite');
 const MAX_MAGNET_SIZE = 8 * 1024 * 1024;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-pass';
+const ADMIN2_PASSWORD = process.env.ADMIN2_PASSWORD || 'admin2-pass';
 const UPLOAD_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_LIMIT = 10;
 const uploadHits = new Map();
@@ -60,7 +61,26 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS admin_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action TEXT NOT NULL,
+    admin_id TEXT,
+    admin_name TEXT,
+    ip TEXT,
     details TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS admins (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    magnet_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    ip TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -75,6 +95,21 @@ if (!magnetColumns.includes('frame_style')) {
 if (!magnetColumns.includes('frame_color')) {
   db.exec("ALTER TABLE magnets ADD COLUMN frame_color TEXT NOT NULL DEFAULT 'white'");
 }
+
+const logColumns = db.prepare('PRAGMA table_info(admin_logs)').all().map(column => column.name);
+if (!logColumns.includes('admin_id')) {
+  db.exec("ALTER TABLE admin_logs ADD COLUMN admin_id TEXT");
+}
+if (!logColumns.includes('admin_name')) {
+  db.exec("ALTER TABLE admin_logs ADD COLUMN admin_name TEXT");
+}
+if (!logColumns.includes('ip')) {
+  db.exec("ALTER TABLE admin_logs ADD COLUMN ip TEXT");
+}
+
+const insertAdmin = db.prepare('INSERT OR IGNORE INTO admins (id, display_name, password_hash) VALUES (?, ?, ?)');
+insertAdmin.run('admin1', 'admin 1', ADMIN_PASSWORD.startsWith('$2') ? ADMIN_PASSWORD : bcrypt.hashSync(ADMIN_PASSWORD, 10));
+insertAdmin.run('admin2', 'admin 2', ADMIN2_PASSWORD.startsWith('$2') ? ADMIN2_PASSWORD : bcrypt.hashSync(ADMIN2_PASSWORD, 10));
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insertSetting.run('title_text', process.env.SITE_TITLE || 'Наш холодильник');
@@ -97,11 +132,16 @@ function settings() {
 }
 
 function isAdmin(req) {
-  return Boolean(req.session?.admin);
+  return Boolean(req.session?.adminId || req.session?.admin);
+}
+
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 function clientKey(req) {
-  return req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  return clientIp(req);
 }
 
 function ipHash(req) {
@@ -124,8 +164,16 @@ function cleanTitleFont(value) {
   return ['classic', 'hand', 'strict'].includes(value) ? value : 'classic';
 }
 
-function logAdmin(action, details = {}) {
-  db.prepare('INSERT INTO admin_logs (action, details) VALUES (?, ?)').run(action, JSON.stringify(details));
+function currentAdmin(req) {
+  const id = req.session?.adminId || (req.session?.admin ? 'admin1' : null);
+  if (!id) return null;
+  return db.prepare('SELECT id, display_name AS displayName FROM admins WHERE id = ?').get(id) || null;
+}
+
+function logAdmin(action, details = {}, req = null) {
+  const admin = req ? currentAdmin(req) : null;
+  db.prepare('INSERT INTO admin_logs (action, admin_id, admin_name, ip, details) VALUES (?, ?, ?, ?, ?)')
+    .run(action, admin?.id || null, admin?.displayName || null, req ? clientIp(req) : '', JSON.stringify(details));
   db.prepare(`
     DELETE FROM admin_logs
     WHERE id NOT IN (
@@ -224,7 +272,21 @@ app.get('/api/settings', (_req, res) => {
 app.get('/api/magnets', (req, res) => {
   const includePending = isAdmin(req) && req.query.all === '1';
   const rows = db.prepare(`
-    SELECT id, file_name AS fileName, original_name AS originalName, caption, frame_style AS frameStyle, frame_color AS frameColor, x, y, width, height, likes, status, created_at AS createdAt
+    SELECT
+      id,
+      file_name AS fileName,
+      original_name AS originalName,
+      caption,
+      frame_style AS frameStyle,
+      frame_color AS frameColor,
+      x,
+      y,
+      width,
+      height,
+      likes,
+      status,
+      created_at AS createdAt,
+      (SELECT COUNT(*) FROM comments WHERE comments.magnet_id = magnets.id) AS commentCount
     FROM magnets
     WHERE ${includePending ? '1 = 1' : "status = 'approved'"}
     ORDER BY created_at ASC
@@ -281,8 +343,8 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     frameStyle: row.frameStyle,
     frameColor: row.frameColor,
     status: row.status,
-    ip: ipHash(req)
-  });
+    ip: clientIp(req)
+  }, req);
 
   res.status(201).json({ ...row, src: `/mems/${row.fileName}` });
 });
@@ -310,16 +372,51 @@ app.post('/api/magnets/:id/like', (req, res) => {
   res.json({ likes: vote(), liked: true });
 });
 
+app.get('/api/magnets/:id/comments', (req, res) => {
+  const magnet = db.prepare("SELECT id FROM magnets WHERE id = ? AND (status = 'approved' OR ? = 1)").get(req.params.id, isAdmin(req) ? 1 : 0);
+  if (!magnet) {
+    res.status(404).json({ error: 'Магнит не найден' });
+    return;
+  }
+  const rows = db.prepare('SELECT id, body, created_at AS createdAt FROM comments WHERE magnet_id = ? ORDER BY id ASC LIMIT 300').all(req.params.id);
+  res.json(rows);
+});
+
+app.post('/api/magnets/:id/comments', (req, res) => {
+  const magnet = db.prepare("SELECT id FROM magnets WHERE id = ? AND status = 'approved'").get(req.params.id);
+  if (!magnet) {
+    res.status(404).json({ error: 'Магнит не найден' });
+    return;
+  }
+  const body = String(req.body.body || '').trim().slice(0, 500);
+  if (!body) {
+    res.status(400).json({ error: 'Введите комментарий' });
+    return;
+  }
+  const result = db.prepare('INSERT INTO comments (magnet_id, body, ip) VALUES (?, ?, ?)').run(req.params.id, body, clientIp(req));
+  logAdmin('comment:add', { magnetId: req.params.id, commentId: result.lastInsertRowid, ip: clientIp(req) }, req);
+  const row = db.prepare('SELECT id, body, created_at AS createdAt FROM comments WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(row);
+});
+
 app.post('/api/admin/login', async (req, res) => {
   const pass = String(req.body.password || '');
-  const configured = ADMIN_PASSWORD.startsWith('$2') ? await bcrypt.compare(pass, ADMIN_PASSWORD) : pass === ADMIN_PASSWORD;
-  if (!configured) {
+  const admins = db.prepare('SELECT id, display_name AS displayName, password_hash AS passwordHash FROM admins ORDER BY id ASC').all();
+  let matched = null;
+  for (const admin of admins) {
+    if (await bcrypt.compare(pass, admin.passwordHash)) {
+      matched = admin;
+      break;
+    }
+  }
+  if (!matched) {
     res.status(401).json({ error: 'Неверный пароль' });
     return;
   }
+  req.session.adminId = matched.id;
   req.session.admin = true;
-  logAdmin('login', { ip: ipHash(req) });
-  res.json({ ok: true });
+  logAdmin('login', {}, req);
+  res.json({ ok: true, admin: { id: matched.id, displayName: matched.displayName } });
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -327,7 +424,8 @@ app.post('/api/admin/logout', (req, res) => {
 });
 
 app.get('/api/admin/me', (req, res) => {
-  res.json({ admin: isAdmin(req) });
+  const admin = currentAdmin(req);
+  res.json({ admin: Boolean(admin), id: admin?.id || null, displayName: admin?.displayName || '' });
 });
 
 app.use('/api/admin', (req, res, next) => {
@@ -336,6 +434,41 @@ app.use('/api/admin', (req, res, next) => {
     return;
   }
   next();
+});
+
+app.patch('/api/admin/profile', async (req, res) => {
+  const admin = currentAdmin(req);
+  if (!admin) {
+    res.status(401).json({ error: 'Нужен вход администратора' });
+    return;
+  }
+
+  const displayName = typeof req.body.displayName === 'string'
+    ? req.body.displayName.trim().slice(0, 40)
+    : admin.displayName;
+  const currentPassword = String(req.body.currentPassword || '');
+  const newPassword = String(req.body.newPassword || '');
+  const row = db.prepare('SELECT password_hash AS passwordHash FROM admins WHERE id = ?').get(admin.id);
+
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: 'Новый пароль должен быть не короче 6 символов' });
+      return;
+    }
+    if (!await bcrypt.compare(currentPassword, row.passwordHash)) {
+      res.status(400).json({ error: 'Текущий пароль неверный' });
+      return;
+    }
+    db.prepare('UPDATE admins SET display_name = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(displayName || admin.displayName, bcrypt.hashSync(newPassword, 10), admin.id);
+  } else {
+    db.prepare('UPDATE admins SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(displayName || admin.displayName, admin.id);
+  }
+
+  const updated = currentAdmin(req);
+  logAdmin('admin:profile-update', { displayName: updated.displayName, passwordChanged: Boolean(newPassword) }, req);
+  res.json({ ok: true, admin: updated });
 });
 
 app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
@@ -362,7 +495,7 @@ app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
     setSetting.run('title_font', cleanTitleFont(req.body.titleFont));
   }
   const cfg = settings();
-  logAdmin('settings:update', cfg);
+  logAdmin('settings:update', cfg, req);
   res.json(cfg);
 });
 
@@ -386,7 +519,7 @@ app.patch('/api/admin/magnets/:id', (req, res) => {
     SET status = @status, x = @x, y = @y, caption = @caption, frame_style = @frameStyle, frame_color = @frameColor
     WHERE id = @id
   `).run(next);
-  logAdmin('magnet:update', next);
+  logAdmin('magnet:update', next, req);
   res.json({ ok: result.changes > 0 });
 });
 
@@ -397,9 +530,10 @@ app.delete('/api/admin/magnets/:id', (req, res) => {
     return;
   }
   db.prepare('DELETE FROM liked_magnets WHERE magnet_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM comments WHERE magnet_id = ?').run(req.params.id);
   db.prepare('DELETE FROM magnets WHERE id = ?').run(req.params.id);
   fs.unlink(path.join(MEMS_DIR, row.fileName), () => {});
-  logAdmin('magnet:delete', { id: req.params.id, fileName: row.fileName });
+  logAdmin('magnet:delete', { id: req.params.id, fileName: row.fileName }, req);
   res.json({ ok: true });
 });
 
@@ -412,6 +546,7 @@ app.delete('/api/admin/magnets', (req, res) => {
   const rows = db.prepare('SELECT id, file_name AS fileName FROM magnets').all();
   const removeAll = db.transaction(() => {
     db.prepare('DELETE FROM liked_magnets').run();
+    db.prepare('DELETE FROM comments').run();
     db.prepare('DELETE FROM magnets').run();
   });
   removeAll();
@@ -420,12 +555,12 @@ app.delete('/api/admin/magnets', (req, res) => {
     fs.unlink(path.join(MEMS_DIR, row.fileName), () => {});
   }
 
-  logAdmin('magnet:delete-all', { count: rows.length });
+  logAdmin('magnet:delete-all', { count: rows.length }, req);
   res.json({ ok: true, count: rows.length });
 });
 
 app.get('/api/admin/logs', (_req, res) => {
-  res.json(db.prepare('SELECT id, action, details, created_at AS createdAt FROM admin_logs ORDER BY id DESC LIMIT 80').all());
+  res.json(db.prepare('SELECT id, action, admin_id AS adminId, admin_name AS adminName, ip, details, created_at AS createdAt FROM admin_logs ORDER BY id DESC LIMIT 80').all());
 });
 
 app.delete('/api/admin/logs', (req, res) => {
@@ -434,7 +569,7 @@ app.delete('/api/admin/logs', (req, res) => {
     return;
   }
   const result = db.prepare('DELETE FROM admin_logs').run();
-  logAdmin('logs:clear', { deleted: result.changes });
+  logAdmin('logs:clear', { deleted: result.changes }, req);
   res.json({ ok: true, deleted: result.changes });
 });
 
