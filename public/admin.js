@@ -18,6 +18,7 @@ const uploadsClosedInput = document.querySelector('#uploadsClosedInput');
 const clearTitleImage = document.querySelector('#clearTitleImage');
 const storagePanel = document.querySelector('#storagePanel');
 const storageText = document.querySelector('#storageText');
+const fridgeStatus = document.querySelector('#fridgeStatus');
 const refreshStorage = document.querySelector('#refreshStorage');
 const closeFridge = document.querySelector('#closeFridge');
 const openFridge = document.querySelector('#openFridge');
@@ -83,9 +84,13 @@ function formatBytes(bytes) {
 
 async function loadStorage() {
   const info = await request('/api/admin/storage');
-  storageText.textContent = `${formatBytes(info.memsBytes)} из 1.00 ГБ${info.uploadsClosed ? ' · холодильник закрыт' : ''}`;
+  const closed = Boolean(info.uploadsClosed);
+  storageText.textContent = `${formatBytes(info.memsBytes)} из 1.00 ГБ`;
   storagePanel.classList.toggle('warning', info.overLimit);
-  uploadsClosedInput.checked = Boolean(info.uploadsClosed);
+  fridgeStatus.textContent = closed ? 'Холодильник закрыт' : 'Холодильник открыт';
+  fridgeStatus.classList.toggle('closed', closed);
+  fridgeStatus.classList.toggle('open', !closed);
+  uploadsClosedInput.checked = closed;
   if (info.overLimit && !storageWarned) {
     storageWarned = true;
     const clear = confirm('Папка mems больше 1 ГБ. Провести полную очистку холодильника от магнитов?');

@@ -380,6 +380,12 @@ button:hover {
   text-shadow: 0 1px 0 rgba(255,255,255,0.9);
 }
 
+.magnet:not(.frame-circle):not(.frame-mini) .caption {
+  box-sizing: border-box;
+  width: calc(100% - max(42px, var(--like-size, 38px)));
+  margin-right: max(34px, calc(var(--like-size, 38px) * 0.75));
+}
+
 .like {
   position: absolute;
   right: -12px;
@@ -776,6 +782,37 @@ button:hover {
 .backup-panel h3 {
   margin: 0 0 6px;
   font-size: 18px;
+}
+
+.storage-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.storage-heading h3 {
+  margin: 0;
+}
+
+.fridge-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid rgba(29, 132, 74, 0.42);
+  border-radius: 999px;
+  color: #1d844a;
+  background: #effaf3;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.fridge-status.closed {
+  border-color: rgba(184, 50, 66, 0.48);
+  color: #b83242;
+  background: #fff0f2;
 }
 
 .storage-panel p,
