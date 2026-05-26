@@ -46,6 +46,7 @@ db.exec(`
     height INTEGER NOT NULL DEFAULT 160,
     likes INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'approved',
+    holder INTEGER NOT NULL DEFAULT 0,
     edit_token_hash TEXT,
     placement_locked INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -106,6 +107,9 @@ if (!magnetColumns.includes('edit_token_hash')) {
 if (!magnetColumns.includes('placement_locked')) {
   db.exec("ALTER TABLE magnets ADD COLUMN placement_locked INTEGER NOT NULL DEFAULT 1");
 }
+if (!magnetColumns.includes('holder')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN holder INTEGER NOT NULL DEFAULT 0");
+}
 
 const logColumns = db.prepare('PRAGMA table_info(admin_logs)').all().map(column => column.name);
 if (!logColumns.includes('admin_id')) {
@@ -129,6 +133,7 @@ insertSetting.run('moderation', 'false');
 insertSetting.run('title_color', '#2a363b');
 insertSetting.run('title_font', 'classic');
 insertSetting.run('uploads_closed', 'false');
+insertSetting.run('magnet_holders', 'true');
 
 const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
@@ -139,6 +144,7 @@ function settings() {
     titleImage: getSetting.get('title_image')?.value || '',
     moderation: getSetting.get('moderation')?.value === 'true',
     uploadsClosed: getSetting.get('uploads_closed')?.value === 'true',
+    magnetHolders: getSetting.get('magnet_holders')?.value !== 'false',
     titleColor: getSetting.get('title_color')?.value || '#2a363b',
     titleFont: getSetting.get('title_font')?.value || 'classic'
   };
@@ -319,12 +325,13 @@ function restoreBackupArchive(name) {
     for (const row of tables.magnets || []) {
       const magnetRow = {
         ...row,
+        holder: typeof row.holder === 'number' ? row.holder : 0,
         edit_token_hash: row.edit_token_hash || null,
         placement_locked: typeof row.placement_locked === 'number' ? row.placement_locked : 1
       };
       db.prepare(`
-        INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, likes, status, edit_token_hash, placement_locked, created_at)
-        VALUES (@id, @file_name, @original_name, @caption, @frame_style, @frame_color, @x, @y, @width, @height, @likes, @status, @edit_token_hash, @placement_locked, @created_at)
+        INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, likes, status, holder, edit_token_hash, placement_locked, created_at)
+        VALUES (@id, @file_name, @original_name, @caption, @frame_style, @frame_color, @x, @y, @width, @height, @likes, @status, @holder, @edit_token_hash, @placement_locked, @created_at)
       `).run(magnetRow);
     }
     for (const row of tables.liked_magnets || []) {
@@ -419,6 +426,7 @@ app.get('/api/magnets', (req, res) => {
       height,
       likes,
       status,
+      holder,
       created_at AS createdAt,
       (SELECT COUNT(*) FROM comments WHERE comments.magnet_id = magnets.id) AS commentCount
     FROM magnets
@@ -454,6 +462,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
   const frameStyle = cleanFrameStyle(req.body.frameStyle || req.body.frame_style);
   const caption = frameStyle === 'mini' ? '' : String(req.body.caption || '').trim().slice(0, 30);
   const frameColor = frameStyle === 'mini' ? 'white' : cleanFrameColor(req.body.frameColor || req.body.frame_color);
+  const holder = cfg.magnetHolders && frameStyle !== 'mini' && Math.random() < 0.45 ? 1 : 0;
   const id = crypto.randomUUID();
   const editToken = crypto.randomUUID();
   const row = {
@@ -469,13 +478,14 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     height: Math.min(Math.max(Number(req.body.height) || 160, 80), 360),
     likes: 0,
     status: cfg.moderation ? 'pending' : 'approved',
+    holder,
     editTokenHash: cfg.moderation ? null : editTokenHash(editToken),
     placementLocked: cfg.moderation ? 1 : 0
   };
 
   db.prepare(`
-    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, status, edit_token_hash, placement_locked)
-    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status, @editTokenHash, @placementLocked)
+    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, status, holder, edit_token_hash, placement_locked)
+    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status, @holder, @editTokenHash, @placementLocked)
   `).run(row);
 
   logAdmin('magnet:add', {
@@ -483,6 +493,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     fileName: row.fileName,
     frameStyle: row.frameStyle,
     frameColor: row.frameColor,
+    holder: row.holder,
     status: row.status,
     ip: clientIp(req)
   }, req);
@@ -682,6 +693,9 @@ app.patch('/api/admin/settings', upload.single('titleImage'), (req, res) => {
   }
   if (typeof req.body.uploadsClosed === 'string') {
     setSetting.run('uploads_closed', req.body.uploadsClosed === 'true' ? 'true' : 'false');
+  }
+  if (typeof req.body.magnetHolders === 'string') {
+    setSetting.run('magnet_holders', req.body.magnetHolders === 'true' ? 'true' : 'false');
   }
   if (req.file) {
     setSetting.run('title_image', `/mems/${req.file.filename}`);

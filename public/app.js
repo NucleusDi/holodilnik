@@ -109,6 +109,7 @@ function renderMagnet(magnet, options = {}) {
   const frameStyle = ['polaroid', 'circle', 'mini'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
   const frameColor = magnet.frameColor || 'white';
   el.className = `magnet frame-${frameStyle} frame-color-${frameColor} ${magnet.status === 'pending' ? 'pending' : ''}`;
+  if (magnet.holder) el.classList.add('has-holder');
   if (options.editToken) el.classList.add('editable');
   el.style.left = `${magnet.x * fridgeScale}px`;
   el.style.top = `${magnet.y * fridgeScale}px`;
@@ -136,6 +137,16 @@ function renderMagnet(magnet, options = {}) {
     }
     openImageDialog(magnet);
   });
+
+  let holder = null;
+  if (magnet.holder && frameStyle !== 'mini') {
+    holder = document.createElement('img');
+    holder.className = 'magnet-holder';
+    holder.src = '/assets/magnet-holder-cutout.png';
+    holder.alt = '';
+    holder.loading = 'lazy';
+    holder.draggable = false;
+  }
 
   const caption = document.createElement('p');
   caption.className = 'caption';
@@ -195,7 +206,9 @@ function renderMagnet(magnet, options = {}) {
     finalizeEditableMagnet().catch(error => showToast(error.message));
   });
 
-  el.append(media, caption);
+  el.append(media);
+  if (holder) el.append(holder);
+  el.append(caption);
   if (like) el.append(like);
   if (options.editToken) {
     el.tabIndex = -1;

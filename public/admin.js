@@ -15,6 +15,7 @@ const titleColorInput = document.querySelector('#titleColorInput');
 const titleFontInput = document.querySelector('#titleFontInput');
 const moderationInput = document.querySelector('#moderationInput');
 const uploadsClosedInput = document.querySelector('#uploadsClosedInput');
+const magnetHoldersInput = document.querySelector('#magnetHoldersInput');
 const clearTitleImage = document.querySelector('#clearTitleImage');
 const storagePanel = document.querySelector('#storagePanel');
 const storageText = document.querySelector('#storageText');
@@ -75,6 +76,7 @@ async function loadSettings() {
   titleFontInput.value = cfg.titleFont || 'classic';
   moderationInput.checked = Boolean(cfg.moderation);
   uploadsClosedInput.checked = Boolean(cfg.uploadsClosed);
+  magnetHoldersInput.checked = Boolean(cfg.magnetHolders);
 }
 
 function formatBytes(bytes) {
@@ -276,6 +278,7 @@ settingsForm.addEventListener('submit', async (event) => {
   form.append('titleFont', titleFontInput.value);
   form.append('moderation', String(moderationInput.checked));
   form.append('uploadsClosed', String(uploadsClosedInput.checked));
+  form.append('magnetHolders', String(magnetHoldersInput.checked));
   form.append('clearTitleImage', String(clearTitleImage.checked));
   if (titleImageInput.files[0]) {
     form.append('titleImage', titleImageInput.files[0]);

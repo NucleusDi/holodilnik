@@ -214,6 +214,20 @@ button:hover {
   background: #f4f7f8;
 }
 
+.magnet-holder {
+  position: absolute;
+  left: 50%;
+  top: max(-34px, calc(var(--w) * -0.18));
+  z-index: 3;
+  width: clamp(56px, calc(var(--w) * 0.52), 112px);
+  height: auto;
+  max-height: none;
+  pointer-events: none;
+  transform: translateX(-50%) rotate(calc(var(--r) * -0.3));
+  filter: drop-shadow(0 7px 8px rgba(17, 31, 39, 0.28));
+  user-select: none;
+}
+
 .magnet-media::after {
   content: "";
   position: absolute;
@@ -310,6 +324,11 @@ button:hover {
   border-radius: 999px;
 }
 
+.magnet.frame-circle .magnet-holder {
+  top: max(-28px, calc(var(--w) * -0.13));
+  width: clamp(50px, calc(var(--w) * 0.44), 96px);
+}
+
 .magnet.frame-circle img {
   height: var(--w);
   max-height: none;
@@ -365,6 +384,11 @@ button:hover {
   height: auto;
   max-height: var(--h);
   object-fit: contain;
+}
+
+.magnet img.magnet-holder {
+  width: clamp(56px, calc(var(--w) * 0.52), 112px);
+  max-height: none;
 }
 
 .caption {
