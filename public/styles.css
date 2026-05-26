@@ -241,7 +241,7 @@ button:hover {
 }
 
 .frame-color-red {
-  --frame-color: #f04f57;
+  --frame-color: #ff8a7a;
 }
 
 .frame-color-orange {
@@ -260,17 +260,43 @@ button:hover {
   --frame-color: #4fc3f7;
 }
 
-.frame-color-indigo {
-  --frame-color: #3f5bd8;
-}
-
-.frame-color-violet {
-  --frame-color: #9b5de5;
-}
-
 .magnet.moving {
   z-index: 20;
   outline: 3px solid #1656b8;
+}
+
+.magnet.editable {
+  z-index: 30;
+  cursor: grab;
+  outline: 3px dashed rgba(22, 86, 184, 0.72);
+  outline-offset: 4px;
+}
+
+.magnet.editable.moving {
+  cursor: grabbing;
+}
+
+.edit-delete {
+  position: absolute;
+  right: -16px;
+  top: -16px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #c93d4b;
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(17, 31, 39, 0.24);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.edit-delete:hover {
+  background: #a92c38;
 }
 
 .magnet.frame-circle {
@@ -626,7 +652,7 @@ button:hover {
 }
 
 .color-choice button[data-frame-color="red"] {
-  --frame-color: #f04f57;
+  --frame-color: #ff8a7a;
 }
 
 .color-choice button[data-frame-color="orange"] {
@@ -643,14 +669,6 @@ button:hover {
 
 .color-choice button[data-frame-color="blue"] {
   --frame-color: #4fc3f7;
-}
-
-.color-choice button[data-frame-color="indigo"] {
-  --frame-color: #3f5bd8;
-}
-
-.color-choice button[data-frame-color="violet"] {
-  --frame-color: #9b5de5;
 }
 
 .color-choice button.active {

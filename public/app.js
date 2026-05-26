@@ -40,6 +40,8 @@ let fridgeScale = 1;
 let suppressImageOpen = false;
 let activeMagnet = null;
 let uploadsClosed = false;
+let editableMagnet = null;
+let editableDrag = null;
 
 function showToast(message) {
   toast.textContent = message;
@@ -74,11 +76,40 @@ function rotationFor(id) {
   return ((n % 13) - 6) / 2;
 }
 
-function renderMagnet(magnet) {
+async function finalizeEditableMagnet() {
+  if (!editableMagnet) return;
+  const current = editableMagnet;
+  editableMagnet = null;
+  current.element.classList.remove('editable', 'moving');
+  current.element.querySelector('.edit-delete')?.remove();
+  await request(`/api/magnets/${current.id}/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ editToken: current.token })
+  });
+}
+
+async function deleteEditableMagnet() {
+  if (!editableMagnet) return;
+  const current = editableMagnet;
+  editableMagnet = null;
+  await request(`/api/magnets/${current.id}/placement`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ editToken: current.token })
+  });
+  magnets = magnets.filter(magnet => magnet.id !== current.id);
+  current.element.remove();
+  growFridge();
+  showToast('Магнит удален');
+}
+
+function renderMagnet(magnet, options = {}) {
   const el = document.createElement('article');
   const frameStyle = ['polaroid', 'circle', 'mini'].includes(magnet.frameStyle) ? magnet.frameStyle : 'polaroid';
   const frameColor = magnet.frameColor || 'white';
   el.className = `magnet frame-${frameStyle} frame-color-${frameColor} ${magnet.status === 'pending' ? 'pending' : ''}`;
+  if (options.editToken) el.classList.add('editable');
   el.style.left = `${magnet.x * fridgeScale}px`;
   el.style.top = `${magnet.y * fridgeScale}px`;
   el.style.setProperty('--w', `${magnet.width * fridgeScale}px`);
@@ -98,6 +129,7 @@ function renderMagnet(magnet) {
   media.append(img);
   media.addEventListener('click', (event) => {
     event.stopPropagation();
+    if (editableMagnet?.id === magnet.id) return;
     if (suppressImageOpen) {
       suppressImageOpen = false;
       return;
@@ -128,6 +160,21 @@ function renderMagnet(magnet) {
   }
 
   el.addEventListener('pointerdown', (event) => {
+    if (editableMagnet?.id === magnet.id && !event.target.closest('.edit-delete')) {
+      event.preventDefault();
+      const rect = el.getBoundingClientRect();
+      editableDrag = {
+        id: magnet.id,
+        token: editableMagnet.token,
+        element: el,
+        magnet,
+        offsetX: (event.clientX - rect.left) / fridgeScale,
+        offsetY: (event.clientY - rect.top) / fridgeScale
+      };
+      el.setPointerCapture(event.pointerId);
+      el.classList.add('moving');
+      return;
+    }
     if (!adminMode || event.target.closest('.like')) return;
     event.preventDefault();
     const rect = el.getBoundingClientRect();
@@ -142,9 +189,32 @@ function renderMagnet(magnet) {
     el.classList.add('moving');
   });
 
+  el.addEventListener('focusout', (event) => {
+    if (editableMagnet?.id !== magnet.id) return;
+    if (event.relatedTarget && el.contains(event.relatedTarget)) return;
+    finalizeEditableMagnet().catch(error => showToast(error.message));
+  });
+
   el.append(media, caption);
   if (like) el.append(like);
+  if (options.editToken) {
+    el.tabIndex = -1;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'edit-delete';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', 'Удалить новый магнит');
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      deleteEditableMagnet().catch(error => showToast(error.message));
+    });
+    el.append(remove);
+    editableMagnet = { id: magnet.id, token: options.editToken, element: el, magnet };
+    requestAnimationFrame(() => el.focus({ preventScroll: true }));
+    showToast('Можно один раз поправить магнит или удалить его');
+  }
   magnetsLayer.append(el);
+  return el;
 }
 
 function openImageDialog(magnet) {
@@ -197,8 +267,12 @@ function updateFridgeScale() {
   const available = Math.max(320, window.innerWidth - (window.innerWidth <= 720 ? 16 : 64));
   fridgeScale = window.innerWidth <= 900 ? Math.min(1, available / baseWidth) : 1;
   document.documentElement.style.setProperty('--fridge-scale', String(fridgeScale));
+  const editableState = editableMagnet ? { id: editableMagnet.id, token: editableMagnet.token } : null;
+  editableMagnet = null;
   magnetsLayer.replaceChildren();
-  magnets.forEach(renderMagnet);
+  magnets.forEach(magnet => {
+    renderMagnet(magnet, editableState?.id === magnet.id ? { editToken: editableState.token } : {});
+  });
   growFridge();
 }
 
@@ -370,7 +444,7 @@ function setSelectedFrameStyle(frameStyle) {
 }
 
 function setSelectedFrameColor(frameColor) {
-  selectedFrameColor = ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'].includes(frameColor) ? frameColor : 'white';
+  selectedFrameColor = ['white', 'red', 'orange', 'yellow', 'green', 'blue'].includes(frameColor) ? frameColor : 'white';
   frameColorInput.querySelectorAll('[data-frame-color]').forEach(button => {
     const active = button.dataset.frameColor === selectedFrameColor;
     button.classList.toggle('active', active);
@@ -411,6 +485,7 @@ async function readClipboardImage() {
 
 async function uploadAt(upload, clientX, clientY) {
   if (!upload) return;
+  await finalizeEditableMagnet();
   const point = pointToFridge(clientX, clientY);
   const size = upload.size;
   const x = Math.max(16, point.x - size.width / 2);
@@ -428,10 +503,11 @@ async function uploadAt(upload, clientX, clientY) {
 
   const magnet = await request('/api/magnets', { method: 'POST', body: form });
   if (magnet.status === 'approved') {
+    const editToken = magnet.editToken;
+    delete magnet.editToken;
     magnets.push(magnet);
-    renderMagnet(magnet);
+    renderMagnet(magnet, { editToken });
     growFridge();
-    showToast('Магнит прилип');
   } else {
     showToast('Магнит отправлен на модерацию');
   }
@@ -545,6 +621,12 @@ fridge.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('pointerdown', (event) => {
+  if (!editableMagnet) return;
+  if (editableMagnet.element.contains(event.target)) return;
+  finalizeEditableMagnet().catch(error => showToast(error.message));
+}, true);
+
 uploadForm.addEventListener('submit', (event) => {
   event.preventDefault();
   if (!uploadDialogResolve) return;
@@ -604,6 +686,15 @@ frameColorInput.addEventListener('click', (event) => {
 });
 
 window.addEventListener('pointermove', (event) => {
+  if (editableDrag) {
+    const point = pointToFridge(event.clientX, event.clientY);
+    const x = Math.max(8, point.x - editableDrag.offsetX);
+    const y = Math.max(8, point.y - editableDrag.offsetY);
+    editableDrag.moved = true;
+    editableDrag.element.style.left = `${x * fridgeScale}px`;
+    editableDrag.element.style.top = `${y * fridgeScale}px`;
+    return;
+  }
   if (!adminDrag) return;
   const point = pointToFridge(event.clientX, event.clientY);
   const x = Math.max(8, point.x - adminDrag.offsetX);
@@ -616,6 +707,29 @@ window.addEventListener('pointermove', (event) => {
 });
 
 window.addEventListener('pointerup', async () => {
+  if (editableDrag) {
+    const drag = editableDrag;
+    editableDrag = null;
+    suppressImageOpen = Boolean(drag.moved);
+    drag.element.classList.remove('moving');
+    const x = Math.round(parseFloat(drag.element.style.left) / fridgeScale);
+    const y = Math.round(parseFloat(drag.element.style.top) / fridgeScale);
+    try {
+      await request(`/api/magnets/${drag.id}/placement`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x, y, editToken: drag.token })
+      });
+      drag.magnet.x = x;
+      drag.magnet.y = y;
+      growFridge();
+    } catch (error) {
+      drag.element.style.left = `${drag.magnet.x * fridgeScale}px`;
+      drag.element.style.top = `${drag.magnet.y * fridgeScale}px`;
+      showToast(error.message);
+    }
+    return;
+  }
   if (!adminDrag) return;
   const drag = adminDrag;
   adminDrag = null;

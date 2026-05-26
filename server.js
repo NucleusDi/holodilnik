@@ -46,6 +46,8 @@ db.exec(`
     height INTEGER NOT NULL DEFAULT 160,
     likes INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'approved',
+    edit_token_hash TEXT,
+    placement_locked INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -97,6 +99,12 @@ if (!magnetColumns.includes('frame_style')) {
 }
 if (!magnetColumns.includes('frame_color')) {
   db.exec("ALTER TABLE magnets ADD COLUMN frame_color TEXT NOT NULL DEFAULT 'white'");
+}
+if (!magnetColumns.includes('edit_token_hash')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN edit_token_hash TEXT");
+}
+if (!magnetColumns.includes('placement_locked')) {
+  db.exec("ALTER TABLE magnets ADD COLUMN placement_locked INTEGER NOT NULL DEFAULT 1");
 }
 
 const logColumns = db.prepare('PRAGMA table_info(admin_logs)').all().map(column => column.name);
@@ -158,7 +166,16 @@ function cleanFrameStyle(value) {
 }
 
 function cleanFrameColor(value) {
-  return ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'].includes(value) ? value : 'white';
+  return ['white', 'red', 'orange', 'yellow', 'green', 'blue'].includes(value) ? value : 'white';
+}
+
+function editTokenHash(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function cleanCoordinate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : null;
 }
 
 function cleanColor(value) {
@@ -300,10 +317,15 @@ function restoreBackupArchive(name) {
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(row.key, row.value);
     }
     for (const row of tables.magnets || []) {
+      const magnetRow = {
+        ...row,
+        edit_token_hash: row.edit_token_hash || null,
+        placement_locked: typeof row.placement_locked === 'number' ? row.placement_locked : 1
+      };
       db.prepare(`
-        INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, likes, status, created_at)
-        VALUES (@id, @file_name, @original_name, @caption, @frame_style, @frame_color, @x, @y, @width, @height, @likes, @status, @created_at)
-      `).run(row);
+        INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, likes, status, edit_token_hash, placement_locked, created_at)
+        VALUES (@id, @file_name, @original_name, @caption, @frame_style, @frame_color, @x, @y, @width, @height, @likes, @status, @edit_token_hash, @placement_locked, @created_at)
+      `).run(magnetRow);
     }
     for (const row of tables.liked_magnets || []) {
       db.prepare('INSERT INTO liked_magnets (magnet_id, voter_id, created_at) VALUES (@magnet_id, @voter_id, @created_at)').run(row);
@@ -433,6 +455,7 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
   const caption = frameStyle === 'mini' ? '' : String(req.body.caption || '').trim().slice(0, 30);
   const frameColor = frameStyle === 'mini' ? 'white' : cleanFrameColor(req.body.frameColor || req.body.frame_color);
   const id = crypto.randomUUID();
+  const editToken = crypto.randomUUID();
   const row = {
     id,
     fileName: req.file.filename,
@@ -445,12 +468,14 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     width: Math.min(Math.max(Number(req.body.width) || 160, 80), 360),
     height: Math.min(Math.max(Number(req.body.height) || 160, 80), 360),
     likes: 0,
-    status: cfg.moderation ? 'pending' : 'approved'
+    status: cfg.moderation ? 'pending' : 'approved',
+    editTokenHash: cfg.moderation ? null : editTokenHash(editToken),
+    placementLocked: cfg.moderation ? 1 : 0
   };
 
   db.prepare(`
-    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, status)
-    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status)
+    INSERT INTO magnets (id, file_name, original_name, caption, frame_style, frame_color, x, y, width, height, status, edit_token_hash, placement_locked)
+    VALUES (@id, @fileName, @originalName, @caption, @frameStyle, @frameColor, @x, @y, @width, @height, @status, @editTokenHash, @placementLocked)
   `).run(row);
 
   logAdmin('magnet:add', {
@@ -462,7 +487,64 @@ app.post('/api/magnets', checkUploadRate, upload.single('magnet'), (req, res) =>
     ip: clientIp(req)
   }, req);
 
-  res.status(201).json({ ...row, src: `/mems/${row.fileName}` });
+  const response = { ...row, src: `/mems/${row.fileName}` };
+  delete response.editTokenHash;
+  delete response.placementLocked;
+  if (row.status === 'approved') response.editToken = editToken;
+  res.status(201).json(response);
+});
+
+function editableMagnet(req, res) {
+  const row = db.prepare(`
+    SELECT id, file_name AS fileName, edit_token_hash AS editTokenHash, placement_locked AS placementLocked
+    FROM magnets
+    WHERE id = ? AND status = 'approved'
+  `).get(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Магнит не найден' });
+    return null;
+  }
+  if (row.placementLocked || !row.editTokenHash || row.editTokenHash !== editTokenHash(req.body.editToken)) {
+    res.status(403).json({ error: 'Магнит уже окончательно прилип' });
+    return null;
+  }
+  return row;
+}
+
+app.patch('/api/magnets/:id/placement', (req, res) => {
+  const row = editableMagnet(req, res);
+  if (!row) return;
+  const x = cleanCoordinate(req.body.x);
+  const y = cleanCoordinate(req.body.y);
+  if (x === null || y === null) {
+    res.status(400).json({ error: 'Некорректная позиция магнита' });
+    return;
+  }
+  db.prepare('UPDATE magnets SET x = ?, y = ? WHERE id = ?').run(x, y, req.params.id);
+  logAdmin('magnet:reposition-once', { id: req.params.id, x, y, ip: clientIp(req) }, req);
+  res.json({ ok: true, x, y });
+});
+
+app.delete('/api/magnets/:id/placement', (req, res) => {
+  const row = editableMagnet(req, res);
+  if (!row) return;
+  const remove = db.transaction(() => {
+    db.prepare('DELETE FROM liked_magnets WHERE magnet_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM comments WHERE magnet_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM magnets WHERE id = ?').run(req.params.id);
+  });
+  remove();
+  fs.unlink(path.join(MEMS_DIR, row.fileName), () => {});
+  logAdmin('magnet:delete-before-stick', { id: req.params.id, fileName: row.fileName, ip: clientIp(req) }, req);
+  res.json({ ok: true });
+});
+
+app.post('/api/magnets/:id/finalize', (req, res) => {
+  const row = editableMagnet(req, res);
+  if (!row) return;
+  db.prepare('UPDATE magnets SET placement_locked = 1, edit_token_hash = NULL WHERE id = ?').run(req.params.id);
+  logAdmin('magnet:finalize', { id: req.params.id, ip: clientIp(req) }, req);
+  res.json({ ok: true });
 });
 
 app.post('/api/magnets/:id/like', (req, res) => {
